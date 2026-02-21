@@ -1,0 +1,58 @@
+{
+    "tagFormat": "v${version}",
+    "branches": [
+        "main"
+    ],
+    "plugins": [
+        [
+            "@semantic-release/commit-analyzer",
+            {
+                "preset": "conventionalcommits"
+            }
+        ],
+        [
+            "@semantic-release/release-notes-generator",
+            {
+                "preset": "conventionalcommits"
+            }
+        ],
+        "@semantic-release/changelog",
+        [
+            "@semantic-release/exec",
+            {
+                "prepareCmd": "sed -i 's/^version = \".*\"/version = \"${nextRelease.version}\"/' Cargo.toml && cargo build --release",
+                "publishCmd": "cargo publish"
+            }
+        ],
+        [
+            "@semantic-release/github",
+            {
+                "assets": [
+                    {
+                        "path": "pvm-*-linux-x86_64.tar.gz",
+                        "label": "Linux x86_64"
+                    },
+                    {
+                        "path": "pvm-*-macos-x86_64.tar.gz",
+                        "label": "macOS x86_64"
+                    },
+                    {
+                        "path": "pvm-*-macos-aarch64.tar.gz",
+                        "label": "macOS Apple Silicon"
+                    }
+                ]
+            }
+        ],
+        [
+            "@semantic-release/git",
+            {
+                "assets": [
+                    "Cargo.toml",
+                    "Cargo.lock",
+                    "CHANGELOG.md"
+                ],
+                "message": "chore(release): version ${nextRelease.version} \n\n${nextRelease.notes}"
+            }
+        ]
+    ]
+}
