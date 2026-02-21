@@ -38,9 +38,10 @@ pub fn list_installed_versions() -> Result<Vec<String>> {
     for entry in std::fs::read_dir(versions_dir)? {
         let entry = entry?;
         if entry.file_type()?.is_dir()
-            && let Ok(name) = entry.file_name().into_string() {
-                versions.push(name);
-            }
+            && let Ok(name) = entry.file_name().into_string()
+        {
+            versions.push(name);
+        }
     }
 
     versions.sort_by(|a, b| {
@@ -55,9 +56,10 @@ pub fn get_current_version() -> String {
     if let Ok(path) = std::env::var("PVM_MULTISHELL_PATH") {
         let p = PathBuf::from(path);
         if let Some(parent) = p.parent()
-            && let Some(name) = parent.file_name() {
-                return name.to_string_lossy().into_owned();
-            }
+            && let Some(name) = parent.file_name()
+        {
+            return name.to_string_lossy().into_owned();
+        }
     }
     "system".to_string()
 }

@@ -22,17 +22,18 @@ pub async fn get_available_versions() -> Result<Vec<String>> {
     // 1. Try to load from valid cache
     if cache_path.exists()
         && let Ok(metadata) = std::fs::metadata(&cache_path)
-            && let Ok(modified) = metadata.modified()
-                && let Ok(elapsed) = modified.elapsed()
-                    && elapsed < CACHE_DURATION
-                        && let Ok(mut file) = File::open(&cache_path) {
-                            let mut contents = String::new();
-                            if file.read_to_string(&mut contents).is_ok()
-                                && let Ok(versions) = serde_json::from_str::<Vec<String>>(&contents)
-                                {
-                                    return Ok(versions);
-                                }
-                        }
+        && let Ok(modified) = metadata.modified()
+        && let Ok(elapsed) = modified.elapsed()
+        && elapsed < CACHE_DURATION
+        && let Ok(mut file) = File::open(&cache_path)
+    {
+        let mut contents = String::new();
+        if file.read_to_string(&mut contents).is_ok()
+            && let Ok(versions) = serde_json::from_str::<Vec<String>>(&contents)
+        {
+            return Ok(versions);
+        }
+    }
 
     // 2. Fetch from remote with a spinner
     println!(
@@ -66,13 +67,14 @@ pub async fn get_available_versions() -> Result<Vec<String>> {
             {
                 versions.push(version.to_string());
             }
-        } else if href.starts_with("php-") && href.ends_with("-cli-linux-x86_64.tar.gz")
+        } else if href.starts_with("php-")
+            && href.ends_with("-cli-linux-x86_64.tar.gz")
             && let Some(version) = href
                 .strip_prefix("php-")
                 .and_then(|h| h.strip_suffix("-cli-linux-x86_64.tar.gz"))
-            {
-                versions.push(version.to_string());
-            }
+        {
+            versions.push(version.to_string());
+        }
     }
 
     // Sort versions by splitting by dot and parsing as numbers

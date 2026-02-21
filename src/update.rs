@@ -15,10 +15,11 @@ pub async fn check_for_updates(target_version: &str) -> Result<Option<String>> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     if guard_file.exists()
         && let Ok(contents) = std::fs::read_to_string(&guard_file)
-            && let Ok(last_check) = contents.trim().parse::<u64>()
-                && now - last_check < 86400 {
-                    return Ok(None);
-                }
+        && let Ok(last_check) = contents.trim().parse::<u64>()
+        && now - last_check < 86400
+    {
+        return Ok(None);
+    }
 
     // Write the new timestamp to prevent spam on next commands
     std::fs::write(&guard_file, now.to_string()).ok();
@@ -36,9 +37,10 @@ pub async fn check_for_updates(target_version: &str) -> Result<Option<String>> {
 
     // Fetch remotes and resolve the newest patch for that minor line
     if let Ok(latest_matching) = network::resolve_version(&minor_prefix).await
-        && latest_matching != target_version {
-            return Ok(Some(latest_matching));
-        }
+        && latest_matching != target_version
+    {
+        return Ok(Some(latest_matching));
+    }
 
     Ok(None)
 }

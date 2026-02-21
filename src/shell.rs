@@ -54,7 +54,8 @@ pvm() {
     return $exit_code
   fi
 }
-".to_string()
+"
+        .to_string()
     }
 }
 
@@ -102,7 +103,8 @@ pvm() {
     return $exit_code
   fi
 }
-".to_string()
+"
+        .to_string()
     }
 }
 
@@ -148,7 +150,8 @@ function pvm
         return $exit_code
     end
 end
-".to_string()
+"
+        .to_string()
     }
 }
 

@@ -73,21 +73,22 @@ impl Use {
         // Smart prompt logic
         if Path::new(".php-version").exists()
             && let Ok(current_file_ver) = std::fs::read_to_string(".php-version")
-                && current_file_ver.trim() != version {
-                    let prompt = format!(
-                        "A .php-version file is present ({}). Do you want to apply this change to the directory?",
-                        current_file_ver.trim().yellow()
-                    );
-                    if Confirm::with_theme(&ColorfulTheme::default())
-                        .with_prompt(&prompt)
-                        .default(false)
-                        .interact_opt()?
-                        .unwrap_or(false)
-                    {
-                        std::fs::write(".php-version", &version).ok();
-                        eprintln!("{} Updated .php-version to {}", "✓".green(), version.bold());
-                    }
-                }
+            && current_file_ver.trim() != version
+        {
+            let prompt = format!(
+                "A .php-version file is present ({}). Do you want to apply this change to the directory?",
+                current_file_ver.trim().yellow()
+            );
+            if Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt(&prompt)
+                .default(false)
+                .interact_opt()?
+                .unwrap_or(false)
+            {
+                std::fs::write(".php-version", &version).ok();
+                eprintln!("{} Updated .php-version to {}", "✓".green(), version.bold());
+            }
+        }
 
         let bin_dir = fs::get_version_bin_dir(&version)?;
         let s = shell::detect_shell();
