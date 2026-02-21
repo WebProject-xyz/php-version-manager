@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/WebProject-xyz/php-version-manager/compare/v1.0.0...v1.0.1) (2026-02-21)
+
+### Bug Fixes
+
+* pass github app token to action-gh-release to avoid permission error ([5461490](https://github.com/WebProject-xyz/php-version-manager/commit/546149064c52b2740257607284ab047536bac45c))
+* re-architect release pipeline to ensure version correctness ([8636f04](https://github.com/WebProject-xyz/php-version-manager/commit/8636f04932334de987dda03ee9745caf25dd41ad))
+
 ## 1.0.0 (2026-02-21)
 
 ### Features
