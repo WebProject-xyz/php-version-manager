@@ -1,6 +1,6 @@
 [package]
 name = "php-version-manager"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "A blazing fast, zero-configuration PHP version manager"
 repository = "https://github.com/WebProject-xyz/php-version-manager"
