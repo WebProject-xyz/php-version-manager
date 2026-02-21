@@ -20,8 +20,8 @@
         [
             "@semantic-release/exec",
             {
-                "prepareCmd": "sed -i 's/^version = \".*\"/version = \"${nextRelease.version}\"/' Cargo.toml",
-                "publishCmd": "cargo publish --allow-dirty"
+                "prepareCmd": "sed -i 's/^version = \".*\"/version = \"${nextRelease.version}\"/' Cargo.toml && cargo check",
+                "publishCmd": "cargo publish --allow-dirty --no-verify"
             }
         ],
         "@semantic-release/github",
