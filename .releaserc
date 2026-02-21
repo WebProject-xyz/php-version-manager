@@ -20,29 +20,11 @@
         [
             "@semantic-release/exec",
             {
-                "prepareCmd": "sed -i 's/^version = \".*\"/version = \"${nextRelease.version}\"/' Cargo.toml && cargo build --release",
+                "prepareCmd": "sed -i 's/^version = \".*\"/version = \"${nextRelease.version}\"/' Cargo.toml",
                 "publishCmd": "cargo publish"
             }
         ],
-        [
-            "@semantic-release/github",
-            {
-                "assets": [
-                    {
-                        "path": "pvm-*-linux-x86_64.tar.gz",
-                        "label": "Linux x86_64"
-                    },
-                    {
-                        "path": "pvm-*-macos-x86_64.tar.gz",
-                        "label": "macOS x86_64"
-                    },
-                    {
-                        "path": "pvm-*-macos-aarch64.tar.gz",
-                        "label": "macOS Apple Silicon"
-                    }
-                ]
-            }
-        ],
+        "@semantic-release/github",
         [
             "@semantic-release/git",
             {

@@ -34,64 +34,18 @@ jobs:
       - name: Run Tests
         run: cargo test
 
-  build:
-    name: Build / ${{ matrix.os }}
-    needs: tests
-    runs-on: ${{ matrix.os }}
-    if: github.ref == 'refs/heads/main'
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact_name: pvm
-            asset_name: pvm-linux-x86_64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: pvm
-            asset_name: pvm-macos-aarch64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact_name: pvm
-            asset_name: pvm-macos-x86_64
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-
-      - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Create tar.gz archive
-        shell: bash
-        run: tar -C target/${{ matrix.target }}/release -czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.asset_name }}
-          path: ${{ matrix.asset_name }}.tar.gz
-          retention-days: 1
-
   release:
     name: Semantic Release
-    needs: build
+    needs: tests
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
       issues: write
       pull-requests: write
+    outputs:
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
     steps:
       - name: Generate Token
         id: generate_token
@@ -105,16 +59,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.generate_token.outputs.token }}
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts/
-
-      - name: Move artifacts to root
-        run: |
-          find artifacts -name "*.tar.gz" -exec mv {} . \;
-          ls -la *.tar.gz
 
       - name: Semantic Release
         id: semantic
@@ -134,3 +78,55 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  build:
+    name: Build / ${{ matrix.os }}
+    needs: release
+    runs-on: ${{ matrix.os }}
+    if: needs.release.outputs.new_release_published == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: pvm
+            asset_name: pvm-linux-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: pvm
+            asset_name: pvm-macos-aarch64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: pvm
+            asset_name: pvm-macos-x86_64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.release.outputs.new_release_version }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Create tar.gz archive
+        shell: bash
+        run: tar -C target/${{ matrix.target }}/release -czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.release.outputs.new_release_version }}
+          files: ${{ matrix.asset_name }}.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
