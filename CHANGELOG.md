@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/WebProject-xyz/php-version-manager/compare/v1.0.1...v1.0.2) (2026-02-21)
+
+### Bug Fixes
+
+* update Cargo.lock and allow-dirty to bypass publish error ([be15c3a](https://github.com/WebProject-xyz/php-version-manager/commit/be15c3a762867c57c7a046bedda86cd2f7f0515f))
+* update Cargo.lock during semantic-release prepare phase to avoid publish errors ([a92c3de](https://github.com/WebProject-xyz/php-version-manager/commit/a92c3de5e5a74dcb80bb3313f1ed83d19905c99d))
+
 ## [1.0.1](https://github.com/WebProject-xyz/php-version-manager/compare/v1.0.0...v1.0.1) (2026-02-21)
 
 ### Bug Fixes
