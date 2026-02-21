@@ -21,7 +21,7 @@
             "@semantic-release/exec",
             {
                 "prepareCmd": "sed -i 's/^version = \".*\"/version = \"${nextRelease.version}\"/' Cargo.toml && cargo check",
-                "publishCmd": "cargo publish"
+                "publishCmd": "cargo publish --allow-dirty"
             }
         ],
         "@semantic-release/github",
