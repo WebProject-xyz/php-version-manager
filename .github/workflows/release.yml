@@ -50,7 +50,7 @@ jobs:
             target: aarch64-apple-darwin
             artifact_name: pvm
             asset_name: pvm-macos-aarch64
-          - os: macos-13
+          - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: pvm
             asset_name: pvm-macos-x86_64
