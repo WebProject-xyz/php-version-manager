@@ -101,10 +101,18 @@ jobs:
             asset_name: pvm-macos-x86_64
 
     steps:
+      - name: Generate Token
+        id: generate_token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: v${{ needs.release.outputs.new_release_version }}
+          token: ${{ steps.generate_token.outputs.token }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -129,4 +137,4 @@ jobs:
           tag_name: v${{ needs.release.outputs.new_release_version }}
           files: ${{ matrix.asset_name }}.tar.gz
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
