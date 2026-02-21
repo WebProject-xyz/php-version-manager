@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/WebProject-xyz/php-version-manager/compare/v1.0.2...v1.0.3) (2026-02-21)
+
+### Bug Fixes
+
+* remove cargo check and allow rust to publish with dirty lockfile ([fefddcd](https://github.com/WebProject-xyz/php-version-manager/commit/fefddcd5f4a43ea95ea9283c684a68d2bf042b3d))
+* skip dev profile verification during cargo publish and sync lockfile ([c67edb5](https://github.com/WebProject-xyz/php-version-manager/commit/c67edb57cf24cef830fbd2778d297e6a54edcb4d))
+
 ## [1.0.2](https://github.com/WebProject-xyz/php-version-manager/compare/v1.0.1...v1.0.2) (2026-02-21)
 
 ### Bug Fixes
