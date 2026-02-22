@@ -2,6 +2,7 @@
 
 [![Build Status](https://github.com/WebProject-xyz/php-version-manager/actions/workflows/release.yml/badge.svg)](https://github.com/WebProject-xyz/php-version-manager/actions/workflows/release.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL_v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Crates.io Version](https://img.shields.io/crates/v/php-version-manager)](https://crates.io/crates/php-version-manager)
 
 Native, blazing fast, zero-configuration PHP version manager for Arch Linux and other Linux/macOS environments, heavily inspired by [fnm](https://github.com/Schniz/fnm).
 
