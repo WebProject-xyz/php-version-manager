@@ -1,3 +1,9 @@
+## [1.0.4](https://github.com/WebProject-xyz/php-version-manager/compare/v1.0.3...v1.0.4) (2026-02-22)
+
+### Bug Fixes
+
+* add Renovate configuration file ([cb24073](https://github.com/WebProject-xyz/php-version-manager/commit/cb24073f88119813a81c703ec63215dcb1e55486))
+
 ## [1.0.3](https://github.com/WebProject-xyz/php-version-manager/compare/v1.0.2...v1.0.3) (2026-02-21)
 
 ### Bug Fixes
