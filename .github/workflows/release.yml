@@ -23,7 +23,7 @@ jobs:
           components: clippy, rustfmt
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
 
       - name: Check format
         run: cargo fmt -- --check
@@ -120,7 +120,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
         with:
           key: ${{ matrix.target }}
 
@@ -132,7 +132,7 @@ jobs:
         run: tar -C target/${{ matrix.target }}/release -czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
 
       - name: Upload to Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
         with:
           tag_name: v${{ needs.release.outputs.new_release_version }}
           files: ${{ matrix.asset_name }}.tar.gz
