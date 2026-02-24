@@ -19,8 +19,16 @@ pub fn get_versions_dir() -> Result<PathBuf> {
     Ok(get_pvm_dir()?.join("versions"))
 }
 
+pub fn get_version_dir(version: &str) -> Result<PathBuf> {
+    Ok(get_versions_dir()?.join(version))
+}
+
 pub fn get_version_bin_dir(version: &str) -> Result<PathBuf> {
-    Ok(get_versions_dir()?.join(version).join("bin"))
+    Ok(get_version_dir(version)?.join("bin"))
+}
+
+pub fn get_version_php_ini_path(version: &str) -> Result<PathBuf> {
+    Ok(get_version_dir(version)?.join("php.ini"))
 }
 
 pub fn is_version_installed(version: &str) -> Result<bool> {

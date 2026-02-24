@@ -49,6 +49,10 @@ pub enum Commands {
     #[clap(name = "uninstall", visible_aliases = &["rm", "remove"])]
     Uninstall(commands::uninstall::Uninstall),
 
+    /// Toggle Xdebug for a PHP version
+    #[clap(name = "xdebug")]
+    Xdebug(commands::xdebug::Xdebug),
+
     /// Initialize a .php-version file in the current directory
     #[clap(name = "init")]
     Init(commands::init::Init),
@@ -65,6 +69,7 @@ impl Commands {
             Self::Current(cmd) => cmd.call().await,
             Self::Uninstall(cmd) => cmd.call().await,
             Self::Init(cmd) => cmd.call().await,
+            Self::Xdebug(cmd) => cmd.call().await,
         }
     }
 }

@@ -1,0 +1,151 @@
+name: Build PHP binaries
+
+on:
+  # Build PHP binaries whenever a new semantic-release tag is pushed
+  push:
+    tags:
+      - "v*.*.*"
+  # Allow manual runs
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-php:
+    name: Build PHP ${{ matrix.php_minor }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php_minor: ["8.2", "8.3", "8.4", "8.5"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Read PHP build version from manifest
+        id: read_manifest
+        env:
+          PHP_MINOR: ${{ matrix.php_minor }}
+        run: |
+          set -euo pipefail
+          python - << 'PYCODE'
+          import json
+          import os
+          import pathlib
+
+          minor = os.environ["PHP_MINOR"]
+          manifest_path = pathlib.Path("php-versions.json")
+          data = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+          info = data.get(minor)
+          if not info or "build" not in info:
+            raise SystemExit(f"No build field for {minor} in php-versions.json")
+
+          build = info["build"]
+          # Expose as step output and env for later steps
+          github_output = os.environ["GITHUB_OUTPUT"]
+          with open(github_output, "a", encoding="utf-8") as fh:
+            fh.write(f"php_build={build}\n")
+          PYCODE
+
+      - name: Cache SPC downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/spc
+            .spc
+          key: spc-${{ runner.os }}-${{ matrix.php_minor }}-${{ steps.read_manifest.outputs.php_build }}
+
+      - name: Download static-php-cli (spc)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o spc.tgz https://dl.static-php.dev/static-php-cli/spc-bin/nightly/spc-linux-x86_64.tar.gz
+          tar -xzf spc.tgz
+          rm spc.tgz
+          chmod +x spc
+
+      - name: Build PHP with static-php-cli
+        env:
+          PHP_BUILD: ${{ steps.read_manifest.outputs.php_build }}
+          # Use a dynamic target on Linux so xdebug can be built as a shared extension
+          SPC_TARGET: native-native-gnu
+        run: |
+          set -euo pipefail
+          ./spc doctor --auto-fix
+          ./spc download --all --with-php="$PHP_BUILD" --prefer-pre-built
+          ./spc build "bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,igbinary,intl,mbregex,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,simplexml,sockets,sqlite3,swoole,tokenizer,xml,xmlreader,xmlwriter,zip,zlib" --build-cli --build-shared="xdebug"
+
+      - name: Package PHP binary and xdebug
+        env:
+          PHP_MINOR: ${{ matrix.php_minor }}
+        run: |
+          set -euo pipefail
+
+          # Expect CLI binary at buildroot/bin/php
+          if [ ! -f buildroot/bin/php ]; then
+            echo "buildroot/bin/php not found" >&2
+            exit 1
+          fi
+
+          # Expect xdebug shared extension at buildroot/modules/xdebug.so
+          if [ ! -f buildroot/modules/xdebug.so ]; then
+            echo "buildroot/modules/xdebug.so not found (xdebug shared extension)" >&2
+            exit 1
+          fi
+
+          mkdir -p "dist/$PHP_MINOR/ext"
+          cp buildroot/bin/php "dist/$PHP_MINOR/php"
+          cp buildroot/modules/xdebug.so "dist/$PHP_MINOR/ext/xdebug.so"
+
+          tar -C "dist/$PHP_MINOR" -czf "php-${PHP_MINOR}-linux-x86_64.tar.gz" .
+
+      - name: Upload PHP tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: php-${{ matrix.php_minor }}-linux-x86_64
+          path: php-${{ matrix.php_minor }}-linux-x86_64.tar.gz
+
+  publish:
+    name: Publish PHP binaries to latest-build release
+    runs-on: ubuntu-latest
+    needs: build-php
+
+    steps:
+      - name: Generate Token
+        id: generate_token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Collect tarballs
+        run: |
+          set -euo pipefail
+          find dist -type f -name "php-*-linux-x86_64.tar.gz" -exec mv {} . \;
+          ls -1 php-*-linux-x86_64.tar.gz
+
+      - name: Upload to latest-build release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        with:
+          tag_name: latest-build
+          files: |
+            php-8.2-linux-x86_64.tar.gz
+            php-8.3-linux-x86_64.tar.gz
+            php-8.4-linux-x86_64.tar.gz
+            php-8.5-linux-x86_64.tar.gz
+            php-versions.json
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+

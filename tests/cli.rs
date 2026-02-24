@@ -101,3 +101,33 @@ fn test_use_silent_export() {
         .success()
         .stdout(predicate::str::contains("export PVM_MULTISHELL_PATH").not());
 }
+
+#[test]
+fn test_use_writes_phprc_to_env_update() {
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    // Mock an installed version with a php.ini
+    let version_dir = temp_dir.path().join("versions").join("8.3.1");
+    let bin_dir = version_dir.join("bin");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    std::fs::write(bin_dir.join("php"), "").unwrap();
+    std::fs::write(version_dir.join("php.ini"), "; test php.ini").unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env("PVM_UPDATE_MODE", "disabled");
+    cmd.current_dir(temp_dir.path());
+    cmd.arg("use").arg("8.3.1");
+    cmd.assert().success();
+
+    let env_update_path = temp_dir.path().join(".env_update");
+    let env_update = std::fs::read_to_string(env_update_path).unwrap();
+    assert!(
+        env_update.contains("export PVM_MULTISHELL_PATH"),
+        ".env_update should contain PVM_MULTISHELL_PATH"
+    );
+    assert!(
+        env_update.contains("PHPRC="),
+        ".env_update should contain PHPRC for the version-local php.ini"
+    );
+}
