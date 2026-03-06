@@ -1229,7 +1229,6 @@ dependencies = [
  "fs4",
  "futures-util",
  "indicatif",
- "log",
  "mockito",
  "predicates",
  "reqwest",

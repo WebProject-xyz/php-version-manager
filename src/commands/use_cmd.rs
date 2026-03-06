@@ -4,6 +4,8 @@ use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
 use dialoguer::{Confirm, Select, theme::ColorfulTheme};
+use fs4::fs_std::FileExt;
+use std::io::Write;
 use std::path::Path;
 
 /// Change PHP version
@@ -72,36 +74,28 @@ impl Use {
         }
 
         // Smart prompt logic
-        if Path::new(PHP_VERSION_FILE).exists() {
-            if let Ok(current_file_ver) = std::fs::read_to_string(PHP_VERSION_FILE) {
-                if current_file_ver.trim() != version {
-                    let prompt = format!(
-                        "A {} file is present ({}). Do you want to apply this change to the directory?",
-                        PHP_VERSION_FILE,
-                        current_file_ver.trim().yellow()
-                    );
-                    if Confirm::with_theme(&ColorfulTheme::default())
-                        .with_prompt(&prompt)
-                        .default(false)
-                        .interact_opt()?
-                        .unwrap_or(false)
-                    {
-                        match std::fs::write(PHP_VERSION_FILE, &version) {
-                            Ok(_) => eprintln!(
-                                "{} Updated {} to {}",
-                                "✓".green(),
-                                PHP_VERSION_FILE,
-                                version.bold()
-                            ),
-                            Err(e) => eprintln!(
-                                "{} Failed to update {}: {}",
-                                "✗".red(),
-                                PHP_VERSION_FILE,
-                                e
-                            ),
-                        }
-                    }
-                }
+        if Path::new(PHP_VERSION_FILE).exists()
+            && let Ok(current_file_ver) = std::fs::read_to_string(PHP_VERSION_FILE)
+            && current_file_ver.trim() != version
+        {
+            let prompt = format!(
+                "A {} file is present ({}). Do you want to apply this change to the directory?",
+                PHP_VERSION_FILE,
+                current_file_ver.trim().yellow()
+            );
+            if Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt(&prompt)
+                .default(false)
+                .interact_opt()?
+                .unwrap_or(false)
+            {
+                std::fs::write(PHP_VERSION_FILE, &version).ok();
+                eprintln!(
+                    "{} Updated {} to {}",
+                    "✓".green(),
+                    PHP_VERSION_FILE,
+                    version.bold()
+                );
             }
         }
 
@@ -112,8 +106,20 @@ impl Use {
         let export_str1 = s.set_env_var(MULTISHELL_PATH_VAR, &bin_dir.to_string_lossy());
         let export_str2 = s.path(&bin_dir);
 
-        let env_file = fs::get_env_update_path(None)?;
-        fs::write_env_file_locked(&env_file, &format!("{}\n{}", export_str1, export_str2))?;
+        let env_file = fs::get_env_update_path()?;
+
+        // Atomic write with advisory lock
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&env_file)?;
+        file.lock_exclusive()?;
+        let mut writer = std::io::BufWriter::new(&file);
+        writeln!(writer, "{}", export_str1)?;
+        writeln!(writer, "{}", export_str2)?;
+        writer.flush()?;
+        file.unlock()?;
 
         // Also update the current Rust binary's environment so spawned subs (or interactive loop) see it
         unsafe {
