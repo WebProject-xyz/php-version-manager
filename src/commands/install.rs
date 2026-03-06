@@ -1,7 +1,10 @@
+use crate::constants::MULTISHELL_PATH_VAR;
 use crate::{fs, network};
 use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
+use fs4::fs_std::FileExt;
+use std::io::Write;
 
 /// Install a specific PHP version
 #[derive(Parser, Debug)]
@@ -72,23 +75,33 @@ pub async fn execute_install(version: &str) -> Result<()> {
                         if let Ok(bin_dir) = crate::fs::get_version_bin_dir(&v) {
                             let s = crate::shell::detect_shell();
                             let export_str1 =
-                                s.set_env_var("PVM_MULTISHELL_PATH", &bin_dir.to_string_lossy());
+                                s.set_env_var(MULTISHELL_PATH_VAR, &bin_dir.to_string_lossy());
                             let export_str2 = s.path(&bin_dir);
 
-                            if let Ok(pvm_dir) = crate::fs::get_pvm_dir() {
-                                let env_file = pvm_dir.join(".env_update");
-                                std::fs::write(
-                                    &env_file,
-                                    format!("{}\n{}", export_str1, export_str2),
-                                )
-                                .ok();
+                            if let Ok(env_file) = crate::fs::get_env_update_path() {
+                                // Atomic write with advisory lock
+                                if let Ok(file) = std::fs::OpenOptions::new()
+                                    .create(true)
+                                    .write(true)
+                                    .truncate(true)
+                                    .open(&env_file)
+                                {
+                                    file.lock_exclusive().ok();
+                                    let mut writer = std::io::BufWriter::new(&file);
+                                    writeln!(writer, "{}\n{}", export_str1, export_str2).ok();
+                                    writer.flush().ok();
+                                    file.unlock().ok();
+                                }
                             }
 
                             unsafe {
-                                std::env::set_var("PVM_MULTISHELL_PATH", &bin_dir);
+                                std::env::set_var(MULTISHELL_PATH_VAR, &bin_dir);
                                 if let Some(path) = std::env::var_os("PATH") {
                                     let mut new_path = std::ffi::OsString::new();
                                     new_path.push(&bin_dir);
+                                    #[cfg(windows)]
+                                    new_path.push(";");
+                                    #[cfg(not(windows))]
                                     new_path.push(":");
                                     new_path.push(&path);
                                     std::env::set_var("PATH", new_path);

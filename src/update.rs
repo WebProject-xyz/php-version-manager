@@ -1,5 +1,8 @@
+use crate::constants::UPDATE_CHECK_GUARD_FILE;
 use crate::{fs, network};
 use anyhow::Result;
+use fs4::fs_std::FileExt;
+use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub async fn check_for_updates(target_version: &str) -> Result<Option<String>> {
@@ -9,20 +12,37 @@ pub async fn check_for_updates(target_version: &str) -> Result<Option<String>> {
     }
 
     let pvm_dir = fs::get_pvm_dir()?;
-    let guard_file = pvm_dir.join(".update_check_guard");
+    let guard_file = pvm_dir.join(UPDATE_CHECK_GUARD_FILE);
 
-    // Check if 24 hours have passed
+    // Acquire lock and check if 24 hours have passed
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(true)
+        .open(&guard_file)?;
+
+    file.lock_exclusive()?;
+
+    let mut contents = String::new();
+    let mut f = &file;
+    f.read_to_string(&mut contents).ok();
+
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    if guard_file.exists()
-        && let Ok(contents) = std::fs::read_to_string(&guard_file)
+    if !contents.is_empty()
         && let Ok(last_check) = contents.trim().parse::<u64>()
         && now - last_check < 86400
     {
+        file.unlock().ok();
         return Ok(None);
     }
 
     // Write the new timestamp to prevent spam on next commands
-    std::fs::write(&guard_file, now.to_string()).ok();
+    file.set_len(0).ok();
+    let mut writer = std::io::BufWriter::new(&file);
+    writeln!(writer, "{}", now).ok();
+    writer.flush().ok();
+    file.unlock().ok();
 
     if target_version == "system" {
         return Ok(None);
