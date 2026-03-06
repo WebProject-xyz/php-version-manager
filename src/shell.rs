@@ -1,3 +1,4 @@
+use crate::constants::{ENV_UPDATE_FILE, PVM_DIR_VAR};
 use std::path::Path;
 
 pub trait Shell {
@@ -35,27 +36,33 @@ fi
     }
 
     fn wrapper_fn(&self) -> String {
-        "
-export PATH=\"$HOME/.local/share/pvm/bin:$PATH\"
+        format!(
+            "
+export PATH=\"${{{}}}/bin:$PATH\"
 
-pvm() {
+pvm() {{
   local command=$1
   if [[ \"$command\" == \"env\" ]]; then
     command pvm \"$@\"
   else
-    local env_file=\"$PVM_DIR/.env_update\"
-    rm -f \"$env_file\" 2>/dev/null
-    command pvm \"$@\"
-    local exit_code=$?
-    if [[ -f \"$env_file\" ]]; then
-      eval \"$(cat \"$env_file\")\"
-      rm -f \"$env_file\"
+    if [[ -n \"${{{}}}\" && -d \"${{{}}}\" ]]; then
+      local env_file=\"${{{}}}/{}_$$\"
+      [[ -f \"$env_file\" ]] && command rm -f \"$env_file\" 2>/dev/null
+      PVM_SHELL_PID=$$ command pvm \"$@\"
+      local exit_code=$?
+      if [[ -f \"$env_file\" ]]; then
+        eval \"$(cat \"$env_file\")\"
+        command rm -f \"$env_file\" 2>/dev/null
+      fi
+      return $exit_code
+    else
+      command pvm \"$@\"
     fi
-    return $exit_code
   fi
-}
-"
-        .to_string()
+}}
+",
+            PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, ENV_UPDATE_FILE
+        )
     }
 }
 
@@ -84,27 +91,33 @@ add-zsh-hook chpwd _pvm_cd_hook
     }
 
     fn wrapper_fn(&self) -> String {
-        "
-export PATH=\"$HOME/.local/share/pvm/bin:$PATH\"
+        format!(
+            "
+export PATH=\"${{{}}}/bin:$PATH\"
 
-pvm() {
+pvm() {{
   local command=$1
   if [[ \"$command\" == \"env\" ]]; then
     command pvm \"$@\"
   else
-    local env_file=\"$PVM_DIR/.env_update\"
-    rm -f \"$env_file\" 2>/dev/null
-    command pvm \"$@\"
-    local exit_code=$?
-    if [[ -f \"$env_file\" ]]; then
-      eval \"$(cat \"$env_file\")\"
-      rm -f \"$env_file\"
+    if [[ -n \"${{{}}}\" && -d \"${{{}}}\" ]]; then
+      local env_file=\"${{{}}}/{}_$$\"
+      [[ -f \"$env_file\" ]] && command rm -f \"$env_file\" 2>/dev/null
+      PVM_SHELL_PID=$$ command pvm \"$@\"
+      local exit_code=$?
+      if [[ -f \"$env_file\" ]]; then
+        eval \"$(cat \"$env_file\")\"
+        command rm -f \"$env_file\" 2>/dev/null
+      fi
+      return $exit_code
+    else
+      command pvm \"$@\"
     fi
-    return $exit_code
   fi
-}
-"
-        .to_string()
+}}
+",
+            PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, ENV_UPDATE_FILE
+        )
     }
 }
 
@@ -131,27 +144,35 @@ end
     }
 
     fn wrapper_fn(&self) -> String {
-        "
-set -gx PATH \"$HOME/.local/share/pvm/bin\" $PATH
+        format!(
+            "
+set -gx PATH \"${{{}}}/bin\" $PATH
 
 function pvm
     set command $argv[1]
     if test \"$command\" = \"env\"
         command pvm $argv
     else
-        set env_file \"$PVM_DIR/.env_update\"
-        rm -f \"$env_file\" 2>/dev/null
-        command pvm $argv
-        set exit_code $status
-        if test -f \"$env_file\"
-            eval (cat \"$env_file\")
-            rm -f \"$env_file\"
+        if test -n \"${{{}}}\"; and test -d \"${{{}}}\"
+            set env_file \"${{{}}}/{}_$fish_pid\"
+            if test -f \"$env_file\"
+                command rm -f \"$env_file\" &>/dev/null
+            end
+            PVM_SHELL_PID=$fish_pid command pvm $argv
+            set exit_code $status
+            if test -f \"$env_file\"
+                eval (cat \"$env_file\")
+                command rm -f \"$env_file\" &>/dev/null
+            end
+            return $exit_code
+        else
+            command pvm $argv
         end
-        return $exit_code
     end
 end
-"
-        .to_string()
+",
+            PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, ENV_UPDATE_FILE
+        )
     }
 }
 
