@@ -46,9 +46,9 @@ pvm() {{
     command pvm \"$@\"
   else
     if [[ -n \"${{{}}}\" && -d \"${{{}}}\" ]]; then
-      local env_file=\"${{{}}}/{}_$(date +%s)_$$\"
+      local env_file=\"${{{}}}/{}_$$\"
       [[ -f \"$env_file\" ]] && command rm -f \"$env_file\" 2>/dev/null
-      PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm \"$@\"
+      PVM_SHELL_PID=$$ command pvm \"$@\"
       local exit_code=$?
       if [[ -f \"$env_file\" ]]; then
         eval \"$(cat \"$env_file\")\"
@@ -101,9 +101,9 @@ pvm() {{
     command pvm \"$@\"
   else
     if [[ -n \"${{{}}}\" && -d \"${{{}}}\" ]]; then
-      local env_file=\"${{{}}}/{}_$(date +%s)_$$\"
+      local env_file=\"${{{}}}/{}_$$\"
       [[ -f \"$env_file\" ]] && command rm -f \"$env_file\" 2>/dev/null
-      PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm \"$@\"
+      PVM_SHELL_PID=$$ command pvm \"$@\"
       local exit_code=$?
       if [[ -f \"$env_file\" ]]; then
         eval \"$(cat \"$env_file\")\"
@@ -154,11 +154,11 @@ function pvm
         command pvm $argv
     else
         if test -n \"${{{}}}\"; and test -d \"${{{}}}\"
-            set env_file \"${{{}}}/{}_$(date +%s)_$fish_pid\"
+            set env_file \"${{{}}}/{}_$fish_pid\"
             if test -f \"$env_file\"
                 command rm -f \"$env_file\" &>/dev/null
             end
-            PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm $argv
+            PVM_SHELL_PID=$fish_pid command pvm $argv
             set exit_code $status
             if test -f \"$env_file\"
                 eval (cat \"$env_file\")
