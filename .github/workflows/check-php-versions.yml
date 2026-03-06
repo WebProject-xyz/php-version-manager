@@ -1,0 +1,98 @@
+name: Check PHP versions
+
+on:
+  schedule:
+    # Check for new PHP patch releases daily
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-php-versions:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate Token
+        id: generate_token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Update php-versions.json from static-php.dev
+        id: update
+        run: |
+          set -euo pipefail
+          python - << 'PYCODE'
+          import json
+          import pathlib
+          import re
+          import sys
+          from urllib.request import urlopen
+
+          manifest_path = pathlib.Path("php-versions.json")
+          if not manifest_path.is_file():
+            sys.exit("php-versions.json not found")
+
+          data = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+          url = "https://dl.static-php.dev/static-php-cli/common/"
+          with urlopen(url) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+
+          # Extract versions like php-8.3.30-cli-linux-x86_64.tar.gz
+          versions = set(re.findall(r"php-(\\d+\\.\\d+\\.\\d+)-cli-linux-x86_64\\.tar\\.gz", html))
+          if not versions:
+            sys.exit("No PHP versions found on static-php.dev; aborting.")
+
+          def sort_key(v: str):
+            return tuple(int(x) for x in v.split("."))
+
+          updated = False
+
+          for minor, info in data.items():
+            prefix = minor + "."
+            matching = sorted((v for v in versions if v.startswith(prefix)), key=sort_key)
+            if not matching:
+              continue
+
+            latest = matching[-1]
+            current = info.get("build")
+            if current != latest:
+              info["build"] = latest
+              updated = True
+
+          if updated:
+            manifest_path.write_text(json.dumps(data, indent=2) + "\\n", encoding="utf-8")
+          PYCODE
+
+      - name: Check for changes
+        id: git_diff
+        run: |
+          if git diff --quiet php-versions.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Pull Request
+        if: steps.git_diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.generate_token.outputs.token }}
+          commit-message: "fix(php): bumped php versions"
+          title: "fix(php): bumped php versions"
+          body: "Update php-versions.json with latest patch versions from static-php.dev."
+          branch: "chore/bump-php-versions"
+          base: "main"
+          add-paths: |
+            php-versions.json
+

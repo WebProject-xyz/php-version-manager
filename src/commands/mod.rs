@@ -6,3 +6,4 @@ pub mod ls;
 pub mod ls_remote;
 pub mod uninstall;
 pub mod use_cmd;
+pub mod xdebug;

@@ -3,6 +3,8 @@ use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
 
+const DEFAULT_PHP_INI: &str = "; php.ini managed by pvm\n";
+
 /// Install a specific PHP version
 #[derive(Parser, Debug)]
 pub struct Install {
@@ -20,6 +22,18 @@ pub async fn execute_install(version: &str) -> Result<()> {
         version
     );
     let resolved_version = network::resolve_version(version).await?;
+
+    // Derive the minor version (e.g. "8.3.30" -> "8.3") to select the correct
+    // tarball from GitHub Releases while still installing into a patch-level
+    // directory locally.
+    let mut parts = resolved_version.split('.').take(2);
+    let major = parts
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Invalid resolved version {}", resolved_version))?;
+    let minor = parts
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Invalid resolved version {}", resolved_version))?;
+    let download_minor = format!("{}.{}", major, minor);
 
     if fs::is_version_installed(&resolved_version)? {
         if version == resolved_version {
@@ -44,8 +58,17 @@ pub async fn execute_install(version: &str) -> Result<()> {
     let dest = versions_dir.join(&resolved_version);
     std::fs::create_dir_all(&dest)?;
 
-    match network::download_and_extract(&resolved_version, &dest).await {
+    match network::download_and_extract(&download_minor, &resolved_version, &dest).await {
         Ok(_) => {
+            if let Ok(php_ini_path) = crate::fs::get_version_php_ini_path(&resolved_version)
+                && !php_ini_path.exists()
+            {
+                if let Some(parent) = php_ini_path.parent() {
+                    std::fs::create_dir_all(parent).ok();
+                }
+                std::fs::write(&php_ini_path, DEFAULT_PHP_INI).ok();
+            }
+
             println!(
                 "{} Successfully installed PHP {} as {}",
                 "✓".green(),
@@ -74,14 +97,20 @@ pub async fn execute_install(version: &str) -> Result<()> {
                             let export_str1 =
                                 s.set_env_var("PVM_MULTISHELL_PATH", &bin_dir.to_string_lossy());
                             let export_str2 = s.path(&bin_dir);
+                            let php_ini_path = crate::fs::get_version_php_ini_path(&v).ok();
+                            let export_str3 = php_ini_path
+                                .as_ref()
+                                .filter(|p| p.exists())
+                                .map(|p| s.set_env_var("PHPRC", &p.to_string_lossy()));
 
                             if let Ok(pvm_dir) = crate::fs::get_pvm_dir() {
                                 let env_file = pvm_dir.join(".env_update");
-                                std::fs::write(
-                                    &env_file,
-                                    format!("{}\n{}", export_str1, export_str2),
-                                )
-                                .ok();
+                                let mut exports = format!("{}\n{}", export_str1, export_str2);
+                                if let Some(line) = export_str3 {
+                                    exports.push('\n');
+                                    exports.push_str(&line);
+                                }
+                                std::fs::write(&env_file, exports).ok();
                             }
 
                             unsafe {
@@ -92,6 +121,11 @@ pub async fn execute_install(version: &str) -> Result<()> {
                                     new_path.push(":");
                                     new_path.push(&path);
                                     std::env::set_var("PATH", new_path);
+                                }
+                                if let Some(php_ini) = php_ini_path
+                                    && php_ini.exists()
+                                {
+                                    std::env::set_var("PHPRC", php_ini);
                                 }
                             }
                             println!("{} Switched to PHP {}", "✓".green(), v.bold());
