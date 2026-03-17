@@ -4,8 +4,6 @@ use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
 use dialoguer::{Confirm, Select, theme::ColorfulTheme};
-use fs4::fs_std::FileExt;
-use std::io::Write;
 use std::path::Path;
 
 /// Change PHP version
@@ -115,19 +113,7 @@ impl Use {
         let export_str2 = s.path(&bin_dir);
 
         let env_file = fs::get_env_update_path(None)?;
-
-        // Atomic write with advisory lock
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&env_file)?;
-        file.lock_exclusive()?;
-        let mut writer = std::io::BufWriter::new(&file);
-        writeln!(writer, "{}", export_str1)?;
-        writeln!(writer, "{}", export_str2)?;
-        writer.flush()?;
-        file.unlock()?;
+        fs::write_env_file_locked(&env_file, &format!("{}\n{}", export_str1, export_str2))?;
 
         // Also update the current Rust binary's environment so spawned subs (or interactive loop) see it
         unsafe {
