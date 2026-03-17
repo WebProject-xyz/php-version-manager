@@ -40,18 +40,19 @@ pub async fn get_available_versions() -> Result<Vec<String>> {
     // 1. Try to load from valid cache
     if cache_path.exists() {
         if let Ok(file) = File::open(&cache_path) {
-            file.lock_shared().ok();
+            fs4::fs_std::FileExt::lock_shared(&file).ok();
             let mut contents = String::new();
             let mut f = &file;
             let read_res = f.read_to_string(&mut contents);
-            file.unlock().ok();
+            fs4::fs_std::FileExt::unlock(&file).ok();
 
             if read_res.is_ok() {
                 if let Ok(metadata) = std::fs::metadata(&cache_path) {
                     if let Ok(modified) = metadata.modified() {
                         if let Ok(elapsed) = modified.elapsed() {
                             if elapsed < CACHE_DURATION {
-                                if let Ok(versions) = serde_json::from_str::<Vec<String>>(&contents) {
+                                if let Ok(versions) = serde_json::from_str::<Vec<String>>(&contents)
+                                {
                                     return Ok(versions);
                                 }
                             }
@@ -95,10 +96,7 @@ pub async fn get_available_versions() -> Result<Vec<String>> {
 
     let mut versions = Vec::new();
     for file in res {
-        if !file.is_dir
-            && file.name.starts_with("php-")
-            && file.name.ends_with(&suffix)
-        {
+        if !file.is_dir && file.name.starts_with("php-") && file.name.ends_with(&suffix) {
             if let Some(version) = file
                 .name
                 .strip_prefix("php-")
@@ -116,6 +114,7 @@ pub async fn get_available_versions() -> Result<Vec<String>> {
         std::fs::create_dir_all(&pvm_dir).ok();
         if let Ok(file) = std::fs::OpenOptions::new()
             .create(true)
+            .truncate(false)
             .read(true)
             .write(true)
             .open(&cache_path)
@@ -125,7 +124,7 @@ pub async fn get_available_versions() -> Result<Vec<String>> {
             let mut writer = std::io::BufWriter::new(&file);
             writer.write_all(json.as_bytes()).ok();
             writer.flush().ok();
-            file.unlock().ok();
+            fs4::fs_std::FileExt::unlock(&file).ok();
         }
     }
 
