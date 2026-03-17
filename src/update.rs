@@ -17,6 +17,7 @@ pub async fn check_for_updates(target_version: &str) -> Result<Option<String>> {
     // Acquire lock and check if 24 hours have passed
     let mut file = std::fs::OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(&guard_file)?;
@@ -30,7 +31,7 @@ pub async fn check_for_updates(target_version: &str) -> Result<Option<String>> {
     if !contents.is_empty() {
         if let Ok(last_check) = contents.trim().parse::<u64>() {
             if now - last_check < 86400 {
-                file.unlock().ok();
+                fs4::fs_std::FileExt::unlock(&file).ok();
                 return Ok(None);
             }
         }
@@ -42,7 +43,7 @@ pub async fn check_for_updates(target_version: &str) -> Result<Option<String>> {
     let mut writer = std::io::BufWriter::new(&file);
     writeln!(writer, "{}", now).ok();
     writer.flush().ok();
-    file.unlock().ok();
+    fs4::fs_std::FileExt::unlock(&file).ok();
 
     if target_version == "system" {
         return Ok(None);

@@ -127,7 +127,7 @@ impl Use {
         writeln!(writer, "{}", export_str1)?;
         writeln!(writer, "{}", export_str2)?;
         writer.flush()?;
-        file.unlock()?;
+        fs4::fs_std::FileExt::unlock(&file)?;
 
         // Also update the current Rust binary's environment so spawned subs (or interactive loop) see it
         unsafe {
