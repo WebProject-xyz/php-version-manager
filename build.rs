@@ -1,6 +1,13 @@
 use std::process::Command;
 
 fn main() {
+    println!("cargo:rerun-if-changed=.git/HEAD");
+    println!("cargo:rerun-if-changed=.git/refs/heads/");
+    println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-env-changed=GITHUB_ACTIONS");
+    println!("cargo:rerun-if-env-changed=CI");
+    println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
+
     let commit_hash = Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
         .output()
@@ -9,15 +16,9 @@ fn main() {
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    let build_time = Command::new("date")
-        .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
-        .output()
-        .ok()
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| "unknown".to_string());
+    let build_time = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
-    let is_ci = std::env::var("GITHUB_ACTIONS").is_ok();
+    let is_ci = std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok();
 
     let version = if is_ci {
         let tag = Command::new("git")
