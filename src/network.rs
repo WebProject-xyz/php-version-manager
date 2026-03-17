@@ -174,25 +174,29 @@ pub async fn download_and_extract(resolved_version: &str, dest: &Path) -> Result
         .error_for_status()
         .context("Server returned an error for the requested PHP version")?;
 
-    let total_size = response
-        .content_length()
-        .context("Failed to get content length from server")?;
+    let total_size = response.content_length();
 
-    let pb = ProgressBar::new(total_size);
-    pb.set_style(ProgressStyle::default_bar()
-        .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
-        .progress_chars("#>-"));
+    let pb = if let Some(size) = total_size {
+        let pb = ProgressBar::new(size);
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
+            .progress_chars("#>-"));
+        pb
+    } else {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(ProgressStyle::default_spinner().template(
+            "{spinner:.green} [{elapsed_precise}] {bytes} downloaded ({bytes_per_sec})",
+        )?);
+        pb
+    };
 
-    let mut downloaded: u64 = 0;
     let mut stream = response.bytes_stream();
     let mut buffer = Vec::new();
 
     while let Some(item) = stream.next().await {
         let chunk = item.context("Error while downloading chunk")?;
         buffer.extend_from_slice(&chunk);
-        let new = std::cmp::min(downloaded + (chunk.len() as u64), total_size);
-        downloaded = new;
-        pb.set_position(new);
+        pb.set_position(buffer.len() as u64);
     }
 
     pb.finish_with_message("Download complete");

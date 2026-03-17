@@ -1,5 +1,6 @@
 use crate::constants::{MULTISHELL_PATH_VAR, PVM_DIR_VAR};
 use anyhow::{Context, Result};
+use fs4::fs_std::FileExt;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -76,6 +77,24 @@ pub fn get_env_update_path(override_path: Option<PathBuf>) -> Result<PathBuf> {
         format!("{}_{}", crate::constants::ENV_UPDATE_FILE, shell_pid)
     };
     Ok(pvm_dir.join(filename))
+}
+
+/// Safely writes content to the environment update file with an exclusive lock.
+pub fn write_env_file_locked(path: &PathBuf, content: &str) -> Result<()> {
+    use std::io::Write;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(path)?;
+
+    file.lock_exclusive()?;
+    file.set_len(0)?;
+    let mut writer = std::io::BufWriter::new(&file);
+    writer.write_all(content.as_bytes())?;
+    writer.flush()?;
+    fs4::fs_std::FileExt::unlock(&file)?;
+    Ok(())
 }
 
 pub fn get_aliased_versions() -> Result<Vec<VersionItem>> {
