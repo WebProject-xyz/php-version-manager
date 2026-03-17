@@ -3,8 +3,6 @@ use crate::{fs, network};
 use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
-use fs4::fs_std::FileExt;
-use std::io::Write;
 
 /// Install a specific PHP version
 #[derive(Parser, Debug)]
@@ -73,22 +71,14 @@ pub async fn execute_install(version: &str) -> Result<()> {
                 let v = crate::fs::resolve_local_version(&resolved_version)?;
                 let bin_dir = crate::fs::get_version_bin_dir(&v)?;
                 let s = crate::shell::detect_shell();
-                let export_str1 =
-                    s.set_env_var(MULTISHELL_PATH_VAR, &bin_dir.to_string_lossy());
+                let export_str1 = s.set_env_var(MULTISHELL_PATH_VAR, &bin_dir.to_string_lossy());
                 let export_str2 = s.path(&bin_dir);
 
                 let env_file = crate::fs::get_env_update_path(None)?;
-                // Atomic write with advisory lock
-                let file = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .truncate(true)
-                    .open(&env_file)?;
-                file.lock_exclusive()?;
-                let mut writer = std::io::BufWriter::new(&file);
-                writeln!(writer, "{}\n{}", export_str1, export_str2)?;
-                writer.flush()?;
-                file.unlock()?;
+                crate::fs::write_env_file_locked(
+                    &env_file,
+                    &format!("{}\n{}", export_str1, export_str2),
+                )?;
 
                 unsafe {
                     std::env::set_var(MULTISHELL_PATH_VAR, &bin_dir);
