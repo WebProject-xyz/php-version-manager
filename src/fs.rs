@@ -38,10 +38,10 @@ pub fn list_installed_versions() -> Result<Vec<String>> {
     let mut versions = Vec::new();
     for entry in std::fs::read_dir(versions_dir)? {
         let entry = entry?;
-        if entry.file_type()?.is_dir()
-            && let Ok(name) = entry.file_name().into_string()
-        {
-            versions.push(name);
+        if entry.file_type()?.is_dir() {
+            if let Ok(name) = entry.file_name().into_string() {
+                versions.push(name);
+            }
         }
     }
 
@@ -52,16 +52,22 @@ pub fn list_installed_versions() -> Result<Vec<String>> {
 pub fn get_current_version() -> String {
     if let Ok(path) = std::env::var(MULTISHELL_PATH_VAR) {
         let p = PathBuf::from(path);
-        if let Some(parent) = p.parent()
-            && let Some(name) = parent.file_name()
-        {
-            return name.to_string_lossy().into_owned();
+        if let Some(parent) = p.parent() {
+            if let Some(name) = parent.file_name() {
+                return name.to_string_lossy().into_owned();
+            }
         }
     }
     "system".to_string()
 }
 
-pub fn get_env_update_path() -> Result<PathBuf> {
+pub fn get_env_update_path(override_path: Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(path) = override_path {
+        return Ok(path);
+    }
+    if let Ok(env_path) = std::env::var("PVM_ENV_UPDATE_PATH") {
+        return Ok(PathBuf::from(env_path));
+    }
     let pvm_dir = get_pvm_dir()?;
     let shell_pid = std::env::var("PVM_SHELL_PID").unwrap_or_default();
     let filename = if shell_pid.is_empty() {

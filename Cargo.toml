@@ -35,6 +35,9 @@ mockito = "1.7.2"
 predicates = "3.1.4"
 tempfile = "3.25.0"
 
+[build-dependencies]
+chrono = "0.4.39"
+
 # Optimize for binary size and performance
 [profile.release]
 opt-level = "z"     # Optimize for size
