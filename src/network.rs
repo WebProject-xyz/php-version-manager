@@ -1,7 +1,10 @@
+use crate::constants::{BASE_URL, REMOTE_CACHE_FILE};
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
+use fs4::fs_std::FileExt;
+use futures_util::StreamExt;
 use reqwest::Client;
-use scraper::{Html, Selector};
+use serde::Deserialize;
 use std::path::Path;
 use tar::Archive;
 
@@ -11,27 +14,52 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::time::Duration;
 
-const BASE_URL: &str = "https://dl.static-php.dev/static-php-cli/common/";
-const CACHE_FILE: &str = "remote_cache.json";
 const CACHE_DURATION: Duration = Duration::from_secs(24 * 60 * 60); // 24 hours
+
+#[derive(Deserialize)]
+struct RemoteFile {
+    name: String,
+    is_dir: bool,
+}
+
+fn get_target_triple() -> Result<&'static str> {
+    use std::env::consts::{ARCH, OS};
+    match (OS, ARCH) {
+        ("linux", "x86_64") => Ok("linux-x86_64"),
+        ("linux", "aarch64") => Ok("linux-aarch64"),
+        ("macos", "x86_64") => Ok("macos-x86_64"),
+        ("macos", "aarch64") => Ok("macos-aarch64"),
+        _ => anyhow::bail!("Unsupported OS/Architecture: {}-{}", OS, ARCH),
+    }
+}
 
 pub async fn get_available_versions() -> Result<Vec<String>> {
     let pvm_dir = crate::fs::get_pvm_dir()?;
-    let cache_path = pvm_dir.join(CACHE_FILE);
+    let cache_path = pvm_dir.join(REMOTE_CACHE_FILE);
 
     // 1. Try to load from valid cache
-    if cache_path.exists()
-        && let Ok(metadata) = std::fs::metadata(&cache_path)
-        && let Ok(modified) = metadata.modified()
-        && let Ok(elapsed) = modified.elapsed()
-        && elapsed < CACHE_DURATION
-        && let Ok(mut file) = File::open(&cache_path)
-    {
-        let mut contents = String::new();
-        if file.read_to_string(&mut contents).is_ok()
-            && let Ok(versions) = serde_json::from_str::<Vec<String>>(&contents)
-        {
-            return Ok(versions);
+    if cache_path.exists() {
+        if let Ok(file) = File::open(&cache_path) {
+            fs4::fs_std::FileExt::lock_shared(&file).ok();
+            let mut contents = String::new();
+            let mut f = &file;
+            let read_res = f.read_to_string(&mut contents);
+            fs4::fs_std::FileExt::unlock(&file).ok();
+
+            if read_res.is_ok() {
+                if let Ok(metadata) = std::fs::metadata(&cache_path) {
+                    if let Ok(modified) = metadata.modified() {
+                        if let Ok(elapsed) = modified.elapsed() {
+                            if elapsed < CACHE_DURATION {
+                                if let Ok(versions) = serde_json::from_str::<Vec<String>>(&contents)
+                                {
+                                    return Ok(versions);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -50,45 +78,53 @@ pub async fn get_available_versions() -> Result<Vec<String>> {
     spinner.enable_steady_tick(Duration::from_millis(100));
 
     let client = Client::new();
-    let res = client.get(BASE_URL).send().await?.text().await?;
+    let json_url = format!("{}?format=json", BASE_URL);
+    let res = client
+        .get(json_url)
+        .send()
+        .await
+        .context("Failed to fetch version list from remote")?
+        .error_for_status()
+        .context("Remote server returned an error when fetching version list")?
+        .json::<Vec<RemoteFile>>()
+        .await
+        .context("Failed to parse remote version JSON")?;
     spinner.finish_and_clear();
 
-    let document = Html::parse_document(&res);
-    let selector = Selector::parse("a").unwrap();
+    let target = get_target_triple()?;
+    let suffix = format!("-cli-{}.tar.gz", target);
 
     let mut versions = Vec::new();
-    for element in document.select(&selector) {
-        let href = element.value().attr("href").unwrap_or("");
-        if href.contains("/php-") && href.ends_with("-cli-linux-x86_64.tar.gz") {
-            let filename = href.rsplit('/').next().unwrap_or(href);
-            if let Some(version) = filename
+    for file in res {
+        if !file.is_dir && file.name.starts_with("php-") && file.name.ends_with(&suffix) {
+            if let Some(version) = file
+                .name
                 .strip_prefix("php-")
-                .and_then(|h| h.strip_suffix("-cli-linux-x86_64.tar.gz"))
+                .and_then(|h: &str| h.strip_suffix(&suffix))
             {
                 versions.push(version.to_string());
             }
-        } else if href.starts_with("php-")
-            && href.ends_with("-cli-linux-x86_64.tar.gz")
-            && let Some(version) = href
-                .strip_prefix("php-")
-                .and_then(|h| h.strip_suffix("-cli-linux-x86_64.tar.gz"))
-        {
-            versions.push(version.to_string());
         }
     }
 
-    // Sort versions by splitting by dot and parsing as numbers
-    versions.sort_by(|a, b| {
-        let a_parts: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
-        let b_parts: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
-        a_parts.cmp(&b_parts)
-    });
+    crate::utils::sort_versions(&mut versions);
 
     // 3. Write to cache
     if let Ok(json) = serde_json::to_string(&versions) {
         std::fs::create_dir_all(&pvm_dir).ok();
-        if let Ok(mut file) = File::create(&cache_path) {
-            file.write_all(json.as_bytes()).ok();
+        if let Ok(file) = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&cache_path)
+        {
+            file.lock_exclusive().ok();
+            file.set_len(0).ok();
+            let mut writer = std::io::BufWriter::new(&file);
+            writer.write_all(json.as_bytes()).ok();
+            writer.flush().ok();
+            fs4::fs_std::FileExt::unlock(&file).ok();
         }
     }
 
@@ -127,22 +163,53 @@ pub async fn resolve_version(requested: &str) -> Result<String> {
 }
 
 pub async fn download_and_extract(resolved_version: &str, dest: &Path) -> Result<()> {
-    let url = format!(
-        "{}/php-{}-cli-linux-x86_64.tar.gz",
-        BASE_URL, resolved_version
-    );
+    let target = get_target_triple()?;
+    let url = format!("{}php-{}-cli-{}.tar.gz", BASE_URL, resolved_version, target);
     let client = Client::new();
-    let res = client.get(&url).send().await?.bytes().await?;
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .context("Failed to connect to download server")?
+        .error_for_status()
+        .context("Server returned an error for the requested PHP version")?;
 
-    let cursor = std::io::Cursor::new(res);
+    let total_size = response.content_length();
+
+    let pb = if let Some(size) = total_size {
+        let pb = ProgressBar::new(size);
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
+            .progress_chars("#>-"));
+        pb
+    } else {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(ProgressStyle::default_spinner().template(
+            "{spinner:.green} [{elapsed_precise}] {bytes} downloaded ({bytes_per_sec})",
+        )?);
+        pb
+    };
+
+    let mut stream = response.bytes_stream();
+    let mut buffer = Vec::new();
+
+    while let Some(item) = stream.next().await {
+        let chunk = item.context("Error while downloading chunk")?;
+        buffer.extend_from_slice(&chunk);
+        pb.set_position(buffer.len() as u64);
+    }
+
+    pb.finish_with_message("Download complete");
+
+    let cursor = std::io::Cursor::new(buffer);
     let tar = GzDecoder::new(cursor);
     let mut archive = Archive::new(tar);
 
     let bin_dir = dest.join("bin");
     std::fs::create_dir_all(&bin_dir)?;
-    archive
-        .unpack(&bin_dir)
-        .context("Failed to unpack downloaded archive")?;
+    archive.unpack(&bin_dir).context(
+        "Failed to unpack downloaded archive - the file might be corrupted or incomplete",
+    )?;
 
     // Make it executable
     #[cfg(unix)]

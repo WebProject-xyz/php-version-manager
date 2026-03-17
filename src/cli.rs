@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(
     name = "pvm",
-    version = env!("CARGO_PKG_VERSION"),
+    version = env!("PVM_VERSION"),
     author,
     about = "Fast and simple PHP version manager",
     disable_version_flag = true,
