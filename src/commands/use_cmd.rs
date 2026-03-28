@@ -91,15 +91,25 @@ impl Use {
         }
 
         let bin_dir = fs::get_version_bin_dir(&version)?;
+        let php_ini_path = fs::get_version_php_ini_path(&version).ok();
         let s = shell::detect_shell();
 
         // These evaluate in the user's shell hook via wrapper
         let export_str1 = s.set_env_var("PVM_MULTISHELL_PATH", &bin_dir.to_string_lossy());
         let export_str2 = s.path(&bin_dir);
+        let export_str3 = php_ini_path
+            .as_ref()
+            .filter(|p| p.exists())
+            .map(|p| s.set_env_var("PHPRC", &p.to_string_lossy()));
 
         let pvm_dir = fs::get_pvm_dir()?;
         let env_file = pvm_dir.join(".env_update");
-        std::fs::write(&env_file, format!("{}\n{}", export_str1, export_str2)).ok();
+        let mut exports = format!("{}\n{}", export_str1, export_str2);
+        if let Some(line) = export_str3 {
+            exports.push('\n');
+            exports.push_str(&line);
+        }
+        std::fs::write(&env_file, exports).ok();
 
         // Also update the current Rust binary's environment so spawned subs (or interactive loop) see it
         unsafe {
@@ -110,6 +120,11 @@ impl Use {
                 new_path.push(":");
                 new_path.push(&path);
                 std::env::set_var("PATH", new_path);
+            }
+            if let Some(php_ini) = php_ini_path
+                && php_ini.exists()
+            {
+                std::env::set_var("PHPRC", php_ini);
             }
         }
 

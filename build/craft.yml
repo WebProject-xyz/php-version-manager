@@ -1,0 +1,14 @@
+# PHP version support: 8.1, 8.2, 8.3, 8.4, 8.5
+php-version: 8.3
+# Put your extension list here
+extensions: "apcu,bcmath,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,gd,iconv,igbinary,mbstring,mbregex,msgpack,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_sqlite,phar,posix,readline,redis,session,simplexml,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib"
+sapi:
+  - cli
+download-options:
+  prefer-pre-built: true
+build-options:
+  build-shared:
+    - xdebug
+  enable-zts: true
+  with-suggested-libs: true
+  with-suggested-exts: true
