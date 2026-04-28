@@ -89,23 +89,30 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
     let target = get_target_triple()?;
     let suffix = format!("-{}.tar.gz", target);
 
-    let mut versions_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut versions_map: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
     for file in res {
         if !file.is_dir
             && file.name.starts_with("php-")
             && file.name.ends_with(&suffix)
-            && let Some(rest) = file.name.strip_prefix("php-").and_then(|s| s.strip_suffix(&suffix))
+            && let Some(rest) = file
+                .name
+                .strip_prefix("php-")
+                .and_then(|s| s.strip_suffix(&suffix))
         {
             if let Some(idx) = rest.rfind('-') {
                 let version = &rest[..idx];
                 let package = &rest[idx + 1..];
-                versions_map.entry(version.to_string()).or_default().push(package.to_string());
+                versions_map
+                    .entry(version.to_string())
+                    .or_default()
+                    .push(package.to_string());
             }
         }
     }
 
     let mut versions: Vec<(String, Vec<String>)> = versions_map.into_iter().collect();
-    
+
     versions.sort_by(|a, b| {
         let v1 = semver::Version::parse(&a.0).unwrap_or(semver::Version::new(0, 0, 0));
         let v2 = semver::Version::parse(&b.0).unwrap_or(semver::Version::new(0, 0, 0));
@@ -158,7 +165,13 @@ pub async fn resolve_version(requested: &str) -> Result<String> {
     let prefix = format!("{}.", requested);
     let matching: Vec<&String> = versions
         .iter()
-        .filter_map(|(v, _)| if v.starts_with(&prefix) { Some(v) } else { None })
+        .filter_map(|(v, _)| {
+            if v.starts_with(&prefix) {
+                Some(v)
+            } else {
+                None
+            }
+        })
         .collect();
 
     // The list is already sorted ascending, so the last match is the newest
@@ -172,9 +185,16 @@ pub async fn resolve_version(requested: &str) -> Result<String> {
     )
 }
 
-pub async fn download_and_extract(resolved_version: &str, package: &str, dest: &Path) -> Result<()> {
+pub async fn download_and_extract(
+    resolved_version: &str,
+    package: &str,
+    dest: &Path,
+) -> Result<()> {
     let target = get_target_triple()?;
-    let url = format!("{}php-{}-{}-{}.tar.gz", BASE_URL, resolved_version, package, target);
+    let url = format!(
+        "{}php-{}-{}-{}.tar.gz",
+        BASE_URL, resolved_version, package, target
+    );
     let client = Client::new();
     let response = client
         .get(&url)
@@ -182,7 +202,10 @@ pub async fn download_and_extract(resolved_version: &str, package: &str, dest: &
         .await
         .context("Failed to connect to download server")?
         .error_for_status()
-        .context(format!("Server returned an error for PHP {} ({})", resolved_version, package))?;
+        .context(format!(
+            "Server returned an error for PHP {} ({})",
+            resolved_version, package
+        ))?;
 
     let total_size = response.content_length();
 

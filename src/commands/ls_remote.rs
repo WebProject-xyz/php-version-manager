@@ -65,7 +65,13 @@ impl LsRemote {
         for (v, pkgs) in versions_info.iter().rev() {
             let pkgs_str = pkgs.join(", ");
             if installed.contains(v) {
-                display_items.push(format!("{} {} {} [{}]", "✓".green(), v, "(installed)".dimmed(), pkgs_str.cyan()));
+                display_items.push(format!(
+                    "{} {} {} [{}]",
+                    "✓".green(),
+                    v,
+                    "(installed)".dimmed(),
+                    pkgs_str.cyan()
+                ));
             } else {
                 display_items.push(format!("  {} [{}]", v, pkgs_str.cyan()));
             }
