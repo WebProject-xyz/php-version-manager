@@ -1,7 +1,7 @@
 use crate::constants::{BASE_URL, REMOTE_CACHE_FILE};
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
-use fs4::fs_std::FileExt;
+
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
@@ -38,27 +38,23 @@ pub async fn get_available_versions() -> Result<Vec<String>> {
     let cache_path = pvm_dir.join(REMOTE_CACHE_FILE);
 
     // 1. Try to load from valid cache
-    if cache_path.exists() {
-        if let Ok(file) = File::open(&cache_path) {
-            file.lock_shared().ok();
-            let mut contents = String::new();
-            let mut f = &file;
-            let read_res = f.read_to_string(&mut contents);
-            file.unlock().ok();
+    if cache_path.exists()
+        && let Ok(file) = File::open(&cache_path)
+    {
+        file.lock_shared().ok();
+        let mut contents = String::new();
+        let mut f = &file;
+        let read_res = f.read_to_string(&mut contents);
+        file.unlock().ok();
 
-            if read_res.is_ok() {
-                if let Ok(metadata) = std::fs::metadata(&cache_path) {
-                    if let Ok(modified) = metadata.modified() {
-                        if let Ok(elapsed) = modified.elapsed() {
-                            if elapsed < CACHE_DURATION {
-                                if let Ok(versions) = serde_json::from_str::<Vec<String>>(&contents) {
-                                    return Ok(versions);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        if read_res.is_ok()
+            && let Ok(metadata) = std::fs::metadata(&cache_path)
+            && let Ok(modified) = metadata.modified()
+            && let Ok(elapsed) = modified.elapsed()
+            && elapsed < CACHE_DURATION
+            && let Ok(versions) = serde_json::from_str::<Vec<String>>(&contents)
+        {
+            return Ok(versions);
         }
     }
 
@@ -98,14 +94,12 @@ pub async fn get_available_versions() -> Result<Vec<String>> {
         if !file.is_dir
             && file.name.starts_with("php-")
             && file.name.ends_with(&suffix)
-        {
-            if let Some(version) = file
+            && let Some(version) = file
                 .name
                 .strip_prefix("php-")
                 .and_then(|h: &str| h.strip_suffix(&suffix))
-            {
-                versions.push(version.to_string());
-            }
+        {
+            versions.push(version.to_string());
         }
     }
 
@@ -118,9 +112,10 @@ pub async fn get_available_versions() -> Result<Vec<String>> {
             .create(true)
             .read(true)
             .write(true)
+            .truncate(false)
             .open(&cache_path)
         {
-            file.lock_exclusive().ok();
+            file.lock().ok();
             file.set_len(0).ok();
             let mut writer = std::io::BufWriter::new(&file);
             writer.write_all(json.as_bytes()).ok();

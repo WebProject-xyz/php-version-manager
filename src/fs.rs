@@ -1,6 +1,6 @@
 use crate::constants::{MULTISHELL_PATH_VAR, PVM_DIR_VAR};
 use anyhow::{Context, Result};
-use fs4::fs_std::FileExt;
+
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -39,10 +39,10 @@ pub fn list_installed_versions() -> Result<Vec<String>> {
     let mut versions = Vec::new();
     for entry in std::fs::read_dir(versions_dir)? {
         let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            if let Ok(name) = entry.file_name().into_string() {
-                versions.push(name);
-            }
+        if entry.file_type()?.is_dir()
+            && let Ok(name) = entry.file_name().into_string()
+        {
+            versions.push(name);
         }
     }
 
@@ -53,10 +53,10 @@ pub fn list_installed_versions() -> Result<Vec<String>> {
 pub fn get_current_version() -> String {
     if let Ok(path) = std::env::var(MULTISHELL_PATH_VAR) {
         let p = PathBuf::from(path);
-        if let Some(parent) = p.parent() {
-            if let Some(name) = parent.file_name() {
-                return name.to_string_lossy().into_owned();
-            }
+        if let Some(parent) = p.parent()
+            && let Some(name) = parent.file_name()
+        {
+            return name.to_string_lossy().into_owned();
         }
     }
     "system".to_string()
@@ -88,12 +88,12 @@ pub fn write_env_file_locked(path: &PathBuf, content: &str) -> Result<()> {
         .truncate(false)
         .open(path)?;
 
-    file.lock_exclusive()?;
+    file.lock()?;
     file.set_len(0)?;
     let mut writer = std::io::BufWriter::new(&file);
     writer.write_all(content.as_bytes())?;
     writer.flush()?;
-    fs4::fs_std::FileExt::unlock(&file)?;
+    file.unlock()?;
     Ok(())
 }
 

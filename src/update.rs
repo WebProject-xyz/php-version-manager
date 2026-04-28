@@ -1,7 +1,7 @@
 use crate::constants::UPDATE_CHECK_GUARD_FILE;
 use crate::{fs, network};
 use anyhow::Result;
-use fs4::fs_std::FileExt;
+
 use std::io::{Read, Seek, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -19,21 +19,21 @@ pub async fn check_for_updates(target_version: &str) -> Result<Option<String>> {
         .create(true)
         .read(true)
         .write(true)
+        .truncate(false)
         .open(&guard_file)?;
 
-    file.lock_exclusive()?;
+    file.lock()?;
 
     let mut contents = String::new();
     file.read_to_string(&mut contents).ok();
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    if !contents.is_empty() {
-        if let Ok(last_check) = contents.trim().parse::<u64>() {
-            if now - last_check < 86400 {
-                file.unlock().ok();
-                return Ok(None);
-            }
-        }
+    if !contents.is_empty()
+        && let Ok(last_check) = contents.trim().parse::<u64>()
+        && now - last_check < 86400
+    {
+        file.unlock().ok();
+        return Ok(None);
     }
 
     // Write the new timestamp to prevent spam on next commands
