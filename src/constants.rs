@@ -17,4 +17,4 @@ pub const UPDATE_CHECK_GUARD_FILE: &str = ".update_check_guard";
 pub const PHP_VERSION_FILE: &str = ".php-version";
 
 /// The base URL for fetching available PHP versions.
-pub const BASE_URL: &str = "https://dl.static-php.dev/static-php-cli/common/";
+pub const BASE_URL: &str = "https://dl.static-php.dev/static-php-cli/bulk/";

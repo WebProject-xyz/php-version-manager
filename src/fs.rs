@@ -7,6 +7,23 @@ use std::path::PathBuf;
 pub struct VersionItem {
     pub display: String,
     pub version: String,
+    pub packages: Vec<String>,
+}
+
+pub fn get_installed_packages(version: &str) -> Vec<String> {
+    let mut pkgs = Vec::new();
+    if let Ok(bin_dir) = get_version_bin_dir(version) {
+        if bin_dir.join("php").exists() || bin_dir.join("php.exe").exists() {
+            pkgs.push("cli".to_string());
+        }
+        if bin_dir.join("php-fpm").exists() || bin_dir.join("php-fpm.exe").exists() {
+            pkgs.push("fpm".to_string());
+        }
+        if bin_dir.join("micro.sfx").exists() {
+            pkgs.push("micro".to_string());
+        }
+    }
+    pkgs
 }
 
 pub fn get_pvm_dir() -> Result<PathBuf> {
@@ -117,6 +134,7 @@ pub fn get_aliased_versions() -> Result<Vec<VersionItem>> {
         items.push(VersionItem {
             display: format!("latest ({})", highest),
             version: highest.clone(),
+            packages: get_installed_packages(highest),
         });
     }
 
@@ -136,6 +154,7 @@ pub fn get_aliased_versions() -> Result<Vec<VersionItem>> {
         items.push(VersionItem {
             display: format!("{} ({})", minor, highest_patch),
             version: highest_patch.clone(),
+            packages: get_installed_packages(highest_patch),
         });
 
         // Add absolute versions for this minor in ascending order
@@ -144,6 +163,7 @@ pub fn get_aliased_versions() -> Result<Vec<VersionItem>> {
                 items.push(VersionItem {
                     display: v.clone(),
                     version: v.clone(),
+                    packages: get_installed_packages(v),
                 });
             }
         }
