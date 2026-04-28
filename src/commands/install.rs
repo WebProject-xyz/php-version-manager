@@ -35,14 +35,22 @@ pub async fn execute_install(version: &str) -> Result<()> {
 
     let theme = dialoguer::theme::ColorfulTheme::default();
     let selections = dialoguer::MultiSelect::with_theme(&theme)
-        .with_prompt(format!("Select packages to install for PHP {}", resolved_version))
+        .with_prompt(format!(
+            "Select packages to install for PHP {}",
+            resolved_version
+        ))
         .items(&available_packages)
-        .defaults(&available_packages.iter().map(|p| p == "cli").collect::<Vec<_>>())
+        .defaults(
+            &available_packages
+                .iter()
+                .map(|p| p == "cli")
+                .collect::<Vec<_>>(),
+        )
         .interact()?;
 
     if selections.is_empty() {
         println!("{} No packages selected. Operation cancelled.", "✗".red());
-        return Ok(())
+        return Ok(());
     }
 
     let selected_packages: Vec<String> = selections
@@ -63,7 +71,12 @@ pub async fn execute_install(version: &str) -> Result<()> {
         if let Err(e) = network::download_and_extract(&resolved_version, package, &dest).await {
             // Only clean up if we failed on the first package, or if we want to fail completely
             std::fs::remove_dir_all(&dest).ok();
-            anyhow::bail!("Failed to install PHP {} (package {}): {}", resolved_version, package, e);
+            anyhow::bail!(
+                "Failed to install PHP {} (package {}): {}",
+                resolved_version,
+                package,
+                e
+            );
         }
     }
 
@@ -95,10 +108,7 @@ pub async fn execute_install(version: &str) -> Result<()> {
         let export_str2 = s.path(&bin_dir);
 
         let env_file = crate::fs::get_env_update_path(None)?;
-        crate::fs::write_env_file_locked(
-            &env_file,
-            &format!("{}\n{}", export_str1, export_str2),
-        )?;
+        crate::fs::write_env_file_locked(&env_file, &format!("{}\n{}", export_str1, export_str2))?;
 
         unsafe {
             std::env::set_var(MULTISHELL_PATH_VAR, &bin_dir);

@@ -18,7 +18,12 @@ impl Ls {
             for item in items {
                 let pkgs_str = item.packages.join(", ");
                 if item.version == current {
-                    println!("* {} {} [{}]", item.display.cyan().bold(), "(current)".cyan(), pkgs_str.cyan());
+                    println!(
+                        "* {} {} [{}]",
+                        item.display.cyan().bold(),
+                        "(current)".cyan(),
+                        pkgs_str.cyan()
+                    );
                 } else {
                     println!("  {} [{}]", item.display, pkgs_str.cyan());
                 }
