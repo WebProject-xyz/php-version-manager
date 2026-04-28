@@ -99,15 +99,14 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
                 .name
                 .strip_prefix("php-")
                 .and_then(|s| s.strip_suffix(&suffix))
+            && let Some(idx) = rest.rfind('-')
         {
-            if let Some(idx) = rest.rfind('-') {
-                let version = &rest[..idx];
-                let package = &rest[idx + 1..];
-                versions_map
-                    .entry(version.to_string())
-                    .or_default()
-                    .push(package.to_string());
-            }
+            let version = &rest[..idx];
+            let package = &rest[idx + 1..];
+            versions_map
+                .entry(version.to_string())
+                .or_default()
+                .push(package.to_string());
         }
     }
 
