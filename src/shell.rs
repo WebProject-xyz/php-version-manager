@@ -146,22 +146,22 @@ end
     fn wrapper_fn(&self) -> String {
         format!(
             "
-set -gx PATH \"${{{}}}/bin\" $PATH
+set -gx PATH \"${}/bin\" $PATH
 
 function pvm
     set command $argv[1]
     if test \"$command\" = \"env\"
         command pvm $argv
     else
-        if test -n \"${{{}}}\"; and test -d \"${{{}}}\"
-            set env_file \"${{{}}}/{}_$(date +%s)_$fish_pid\"
+        if test -n \"${}\"; and test -d \"${}\"
+            set env_file \"${}/{}_\"(date +%s)\"_$fish_pid\"
             if test -f \"$env_file\"
                 command rm -f \"$env_file\" &>/dev/null
             end
             PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm $argv
             set exit_code $status
             if test -f \"$env_file\"
-                eval (cat \"$env_file\")
+                source \"$env_file\"
                 command rm -f \"$env_file\" &>/dev/null
             end
             return $exit_code

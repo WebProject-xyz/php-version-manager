@@ -69,7 +69,7 @@ pub async fn execute_install(version: &str) -> Result<()> {
             package
         );
         if let Err(e) = network::download_and_extract(&resolved_version, package, &dest).await {
-            // Only clean up if we failed on the first package, or if we want to fail completely
+            // Atomic install: any package failure removes the entire version dir
             std::fs::remove_dir_all(&dest).ok();
             anyhow::bail!(
                 "Failed to install PHP {} (package {}): {}",
