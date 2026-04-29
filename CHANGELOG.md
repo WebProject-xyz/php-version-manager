@@ -1,3 +1,19 @@
+## [1.1.0](https://github.com/WebProject-xyz/php-version-manager/compare/v1.0.4...v1.1.0) (2026-04-29)
+
+### Features
+
+* improve concurrency safety, cross-platform support and dynamic versioning ([85e6c80](https://github.com/WebProject-xyz/php-version-manager/commit/85e6c806e3abc5b8e2c011a48bb1a36b8dac4614))
+* improve concurrency safety, cross-platform support and dynamic versioning ([3bc8179](https://github.com/WebProject-xyz/php-version-manager/commit/3bc8179a1323e42add24f9c113ca7d2d086df25a))
+* support multiple PHP packages via new bulk API ([5f20206](https://github.com/WebProject-xyz/php-version-manager/commit/5f202060d39a4ec88e2e07828cae75a8c484bfd2))
+
+### Bug Fixes
+
+* address CodeRabbit review findings ([05f9621](https://github.com/WebProject-xyz/php-version-manager/commit/05f9621d423dcd4cfe6458f9132c18efcb3256e4))
+* address remaining CodeRabbit findings on PR [#6](https://github.com/WebProject-xyz/php-version-manager/issues/6) ([e6130ed](https://github.com/WebProject-xyz/php-version-manager/commit/e6130ed1fd30f61b84ac179523e98582ddd5b4ad))
+* address second-round CodeRabbit review on PR [#6](https://github.com/WebProject-xyz/php-version-manager/issues/6) ([0f9c7f0](https://github.com/WebProject-xyz/php-version-manager/commit/0f9c7f06e46018cce3c5c441b8b696211cff480e))
+* resolve clippy::collapsible-if lint in network.rs ([4923dc1](https://github.com/WebProject-xyz/php-version-manager/commit/4923dc12a76dfb0592f0e18893973d053be3ab8c))
+* **shell:** add RANDOM entropy to env_file names ([19efe4c](https://github.com/WebProject-xyz/php-version-manager/commit/19efe4cb0444b52dd7476d3c8c9f1eb4b32567bc))
+
 ## [1.0.4](https://github.com/WebProject-xyz/php-version-manager/compare/v1.0.3...v1.0.4) (2026-02-22)
 
 ### Bug Fixes
