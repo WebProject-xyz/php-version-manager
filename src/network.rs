@@ -11,10 +11,20 @@ use tar::Archive;
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::time::Duration;
 
 const CACHE_DURATION: Duration = Duration::from_secs(24 * 60 * 60); // 24 hours
+const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+
+fn http_client() -> Result<Client> {
+    Client::builder()
+        .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .timeout(HTTP_REQUEST_TIMEOUT)
+        .build()
+        .context("Failed to initialize HTTP client")
+}
 
 #[derive(Deserialize)]
 struct RemoteFile {
@@ -72,7 +82,7 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
     spinner.set_message("Fetching...");
     spinner.enable_steady_tick(Duration::from_millis(100));
 
-    let client = Client::new();
+    let client = http_client()?;
     let json_url = format!("{}?format=json", BASE_URL);
     let res = client
         .get(json_url)
@@ -194,7 +204,7 @@ pub async fn download_and_extract(
         "{}php-{}-{}-{}.tar.gz",
         BASE_URL, resolved_version, package, target
     );
-    let client = Client::new();
+    let client = http_client()?;
     let response = client
         .get(&url)
         .send()
@@ -222,19 +232,24 @@ pub async fn download_and_extract(
         pb
     };
 
+    // Stream the archive into a temp file to avoid materializing the whole tarball in memory.
+    let mut tmp = tempfile::tempfile().context("Failed to create temporary archive file")?;
+    let mut downloaded: u64 = 0;
     let mut stream = response.bytes_stream();
-    let mut buffer = Vec::new();
-
     while let Some(item) = stream.next().await {
         let chunk = item.context("Error while downloading chunk")?;
-        buffer.extend_from_slice(&chunk);
-        pb.set_position(buffer.len() as u64);
+        tmp.write_all(&chunk)
+            .context("Failed to write archive chunk to temp file")?;
+        downloaded += chunk.len() as u64;
+        pb.set_position(downloaded);
     }
+    tmp.flush().context("Failed to flush temp archive file")?;
+    tmp.seek(SeekFrom::Start(0))
+        .context("Failed to rewind temp archive file")?;
 
     pb.finish_with_message(format!("Downloaded package {}", package));
 
-    let cursor = std::io::Cursor::new(buffer);
-    let tar = GzDecoder::new(cursor);
+    let tar = GzDecoder::new(tmp);
     let mut archive = Archive::new(tar);
 
     let bin_dir = dest.join("bin");

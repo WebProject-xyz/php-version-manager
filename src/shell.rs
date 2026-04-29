@@ -8,15 +8,49 @@ pub trait Shell {
     fn wrapper_fn(&self) -> String;
 }
 
+/// Quote a string for POSIX shells (bash/zsh) by wrapping it in single quotes
+/// and escaping any embedded single quotes via the `'\''` idiom.
+fn posix_single_quote(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('\'');
+    for c in value.chars() {
+        if c == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(c);
+        }
+    }
+    out.push('\'');
+    out
+}
+
+/// Quote a string for fish by wrapping it in single quotes and escaping `\` and `'`.
+fn fish_single_quote(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('\'');
+    for c in value.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\'' => out.push_str("\\'"),
+            other => out.push(other),
+        }
+    }
+    out.push('\'');
+    out
+}
+
 pub struct Bash;
 
 impl Shell for Bash {
     fn path(&self, path: &Path) -> String {
-        format!("export PATH=\"{}:$PATH\"", path.display())
+        format!(
+            "export PATH={}:\"$PATH\"",
+            posix_single_quote(&path.display().to_string())
+        )
     }
 
     fn set_env_var(&self, name: &str, value: &str) -> String {
-        format!("export {}=\"{}\"", name, value)
+        format!("export {}={}", name, posix_single_quote(value))
     }
 
     fn use_on_cd(&self) -> String {
@@ -70,11 +104,14 @@ pub struct Zsh;
 
 impl Shell for Zsh {
     fn path(&self, path: &Path) -> String {
-        format!("export PATH=\"{}:$PATH\"", path.display())
+        format!(
+            "export PATH={}:\"$PATH\"",
+            posix_single_quote(&path.display().to_string())
+        )
     }
 
     fn set_env_var(&self, name: &str, value: &str) -> String {
-        format!("export {}=\"{}\"", name, value)
+        format!("export {}={}", name, posix_single_quote(value))
     }
 
     fn use_on_cd(&self) -> String {
@@ -125,11 +162,14 @@ pub struct Fish;
 
 impl Shell for Fish {
     fn path(&self, path: &Path) -> String {
-        format!("set -gx PATH \"{}\" $PATH", path.display())
+        format!(
+            "set -gx PATH {} $PATH",
+            fish_single_quote(&path.display().to_string())
+        )
     }
 
     fn set_env_var(&self, name: &str, value: &str) -> String {
-        format!("set -gx {} \"{}\"", name, value)
+        format!("set -gx {} {}", name, fish_single_quote(value))
     }
 
     fn use_on_cd(&self) -> String {
@@ -197,7 +237,7 @@ mod tests {
         let path = std::path::Path::new("/home/user/.local/share/pvm/versions/8.3.1/bin");
         assert_eq!(
             bash.path(path),
-            "export PATH=\"/home/user/.local/share/pvm/versions/8.3.1/bin:$PATH\""
+            "export PATH='/home/user/.local/share/pvm/versions/8.3.1/bin':\"$PATH\""
         );
     }
 
@@ -206,7 +246,16 @@ mod tests {
         let bash = Bash;
         assert_eq!(
             bash.set_env_var("PVM_MULTISHELL_PATH", "/some/path"),
-            "export PVM_MULTISHELL_PATH=\"/some/path\""
+            "export PVM_MULTISHELL_PATH='/some/path'"
+        );
+    }
+
+    #[test]
+    fn test_bash_set_env_escapes_special_chars() {
+        let bash = Bash;
+        assert_eq!(
+            bash.set_env_var("X", "evil$(whoami)`id`\"$PATH\"'quote"),
+            "export X='evil$(whoami)`id`\"$PATH\"'\\''quote'"
         );
     }
 
@@ -216,7 +265,7 @@ mod tests {
         let path = std::path::Path::new("/home/user/.local/share/pvm/versions/8.3.1/bin");
         assert_eq!(
             zsh.path(path),
-            "export PATH=\"/home/user/.local/share/pvm/versions/8.3.1/bin:$PATH\""
+            "export PATH='/home/user/.local/share/pvm/versions/8.3.1/bin':\"$PATH\""
         );
     }
 
@@ -226,7 +275,13 @@ mod tests {
         let path = std::path::Path::new("/home/user/.local/share/pvm/versions/8.3.1/bin");
         assert_eq!(
             fish.path(path),
-            "set -gx PATH \"/home/user/.local/share/pvm/versions/8.3.1/bin\" $PATH"
+            "set -gx PATH '/home/user/.local/share/pvm/versions/8.3.1/bin' $PATH"
         );
+    }
+
+    #[test]
+    fn test_fish_set_env_escapes_special_chars() {
+        let fish = Fish;
+        assert_eq!(fish.set_env_var("X", "a'b\\c"), "set -gx X 'a\\'b\\\\c'");
     }
 }

@@ -59,6 +59,7 @@ pub async fn execute_install(version: &str) -> Result<()> {
         .collect();
 
     let dest = versions_dir.join(&resolved_version);
+    let dest_existed = dest.exists();
     std::fs::create_dir_all(&dest)?;
 
     for package in &selected_packages {
@@ -69,8 +70,11 @@ pub async fn execute_install(version: &str) -> Result<()> {
             package
         );
         if let Err(e) = network::download_and_extract(&resolved_version, package, &dest).await {
-            // Atomic install: any package failure removes the entire version dir
-            std::fs::remove_dir_all(&dest).ok();
+            // Only wipe the dest if it didn't exist before this install attempt;
+            // a pre-existing install must not be destroyed by a follow-up failure.
+            if !dest_existed {
+                std::fs::remove_dir_all(&dest).ok();
+            }
             anyhow::bail!(
                 "Failed to install PHP {} (package {}): {}",
                 resolved_version,
@@ -88,17 +92,19 @@ pub async fn execute_install(version: &str) -> Result<()> {
         resolved_version
     );
 
-    // Ask user if they want to use it right away
-    let use_now = dialoguer::Confirm::with_theme(&theme)
-        .with_prompt(
-            format!("Do you want to use PHP {} now?", resolved_version)
-                .bold()
-                .to_string(),
-        )
-        .default(true)
-        .interact_opt()
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
+    // Only the cli package places a `php` binary on PATH; without it, switching is meaningless.
+    let cli_selected = selected_packages.iter().any(|p| p == "cli");
+    let use_now = cli_selected
+        && dialoguer::Confirm::with_theme(&theme)
+            .with_prompt(
+                format!("Do you want to use PHP {} now?", resolved_version)
+                    .bold()
+                    .to_string(),
+            )
+            .default(true)
+            .interact_opt()
+            .unwrap_or(Some(false))
+            .unwrap_or(false);
 
     if use_now {
         let v = crate::fs::resolve_local_version(&resolved_version)?;
@@ -124,6 +130,11 @@ pub async fn execute_install(version: &str) -> Result<()> {
             }
         }
         println!("{} Switched to PHP {}", "✓".green(), v.bold());
+    } else if !cli_selected {
+        println!(
+            "{} The 'cli' package was not selected; this version cannot be activated via PATH.",
+            "💡".yellow()
+        );
     } else {
         println!(
             "{} To use this version later, run `{}`",
