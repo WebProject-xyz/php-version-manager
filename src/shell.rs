@@ -46,7 +46,7 @@ pvm() {{
     command pvm \"$@\"
   else
     if [[ -n \"${{{}}}\" && -d \"${{{}}}\" ]]; then
-      local env_file=\"${{{}}}/{}_$(date +%s)_$$\"
+      local env_file=\"${{{}}}/{}_$$_${{RANDOM}}${{RANDOM}}_$(date +%s)\"
       [[ -f \"$env_file\" ]] && command rm -f \"$env_file\" 2>/dev/null
       PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm \"$@\"
       local exit_code=$?
@@ -101,7 +101,7 @@ pvm() {{
     command pvm \"$@\"
   else
     if [[ -n \"${{{}}}\" && -d \"${{{}}}\" ]]; then
-      local env_file=\"${{{}}}/{}_$(date +%s)_$$\"
+      local env_file=\"${{{}}}/{}_$$_${{RANDOM}}${{RANDOM}}_$(date +%s)\"
       [[ -f \"$env_file\" ]] && command rm -f \"$env_file\" 2>/dev/null
       PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm \"$@\"
       local exit_code=$?
@@ -154,7 +154,7 @@ function pvm
         command pvm $argv
     else
         if test -n \"${}\"; and test -d \"${}\"
-            set env_file \"${}/{}_\"(date +%s)\"_$fish_pid\"
+            set env_file \"${}/{}_$fish_pid\"_(random)(random)_(date +%s)
             if test -f \"$env_file\"
                 command rm -f \"$env_file\" &>/dev/null
             end
