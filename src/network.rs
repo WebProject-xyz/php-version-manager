@@ -40,8 +40,8 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
     // 1. Try to load from valid cache
     if cache_path.exists()
         && let Ok(file) = File::open(&cache_path)
+        && file.lock_shared().is_ok()
     {
-        file.lock_shared().ok();
         let mut contents = String::new();
         let mut f = &file;
         let read_res = f.read_to_string(&mut contents);
@@ -122,7 +122,7 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
         pkgs.sort();
     }
 
-    // 3. Write to cache
+    // 3. Write to cache (skip silently if lock fails — next run will retry)
     if let Ok(json) = serde_json::to_string(&versions) {
         std::fs::create_dir_all(&pvm_dir).ok();
         if let Ok(file) = std::fs::OpenOptions::new()
@@ -131,8 +131,8 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
             .write(true)
             .truncate(false)
             .open(&cache_path)
+            && file.lock().is_ok()
         {
-            file.lock().ok();
             file.set_len(0).ok();
             let mut writer = std::io::BufWriter::new(&file);
             writer.write_all(json.as_bytes()).ok();

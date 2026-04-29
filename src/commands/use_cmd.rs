@@ -1,6 +1,6 @@
 use crate::constants::{MULTISHELL_PATH_VAR, PHP_VERSION_FILE};
 use crate::{fs, shell, update};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use colored::Colorize;
 use dialoguer::{Confirm, Select, theme::ColorfulTheme};
@@ -87,17 +87,14 @@ impl Use {
                 .interact_opt()?
                 .unwrap_or(false)
             {
-                match std::fs::write(PHP_VERSION_FILE, &version) {
-                    Ok(_) => eprintln!(
-                        "{} Updated {} to {}",
-                        "✓".green(),
-                        PHP_VERSION_FILE,
-                        version.bold()
-                    ),
-                    Err(e) => {
-                        eprintln!("{} Failed to update {}: {}", "✗".red(), PHP_VERSION_FILE, e)
-                    }
-                }
+                std::fs::write(PHP_VERSION_FILE, &version)
+                    .with_context(|| format!("Failed to update {}", PHP_VERSION_FILE))?;
+                eprintln!(
+                    "{} Updated {} to {}",
+                    "✓".green(),
+                    PHP_VERSION_FILE,
+                    version.bold()
+                );
             }
         }
 

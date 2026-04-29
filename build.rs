@@ -2,7 +2,11 @@ use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=.git/HEAD");
-    println!("cargo:rerun-if-changed=.git/refs/heads/");
+    if let Ok(head) = std::fs::read_to_string(".git/HEAD")
+        && let Some(ref_path) = head.strip_prefix("ref: ")
+    {
+        println!("cargo:rerun-if-changed=.git/{}", ref_path.trim());
+    }
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-env-changed=GITHUB_ACTIONS");
     println!("cargo:rerun-if-env-changed=CI");
@@ -12,8 +16,10 @@ fn main() {
         .args(["rev-parse", "--short", "HEAD"])
         .output()
         .ok()
+        .filter(|output| output.status.success())
         .and_then(|output| String::from_utf8(output.stdout).ok())
         .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "unknown".to_string());
 
     let build_time = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
@@ -25,8 +31,10 @@ fn main() {
             .args(["describe", "--tags", "--always"])
             .output()
             .ok()
+            .filter(|output| output.status.success())
             .and_then(|output| String::from_utf8(output.stdout).ok())
             .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "unknown".to_string());
         format!("{} (built at: {})", tag, build_time)
     } else {
