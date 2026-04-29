@@ -16,7 +16,7 @@ impl LsRemote {
         let mut versions_info = network::get_available_versions().await?;
 
         if let Some(prefix) = &self.version_prefix {
-            versions_info.retain(|(v, _)| v.starts_with(prefix) || v == prefix);
+            versions_info.retain(|(v, _)| v == prefix || v.starts_with(&format!("{}.", prefix)));
         }
 
         if versions_info.is_empty() {

@@ -28,7 +28,7 @@ When running `git commit -m "..."` in the shell (like Zsh/Bash), backticks are i
 
 ### static-php-cli Integration
 - **Endpoint:** `https://dl.static-php.dev/static-php-cli/bulk/`
-- **Supported OS:** `linux`, `macos`.
+- **Supported OS:** `linux`, `macOS`.
 - **Supported Arch:** `x86_64`, `aarch64`.
 - **Packages:** `cli`, `fpm`, `micro`.
 - **Format:** `tar.gz` only.

@@ -30,7 +30,7 @@ pub async fn check_for_updates(target_version: &str) -> Result<Option<String>> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     if !contents.is_empty()
         && let Ok(last_check) = contents.trim().parse::<u64>()
-        && now - last_check < 86400
+        && now.saturating_sub(last_check) < 86400
     {
         file.unlock().ok();
         return Ok(None);
