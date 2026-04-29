@@ -13,11 +13,11 @@ When running `git commit -m "..."` in the shell (like Zsh/Bash), backticks are i
 
 ## Project Architecture (The Map)
 ### Filesystem Hierarchy
-- **$PVM_DIR**: Root directory, defaults to `~/.local/share/pvm` on Linux/macOS.
+- **$PVM_DIR**: Root directory. Resolved via `dirs::data_local_dir()`, so defaults to `~/.local/share/pvm` on Linux and `~/Library/Application Support/pvm` on macOS.
 - **$PVM_DIR/versions/<version>**: Installation directory for specific PHP versions.
 - **$PVM_DIR/bin/pvm**: The `pvm` binary itself.
-- **$PVM_DIR/remote_cache.json**: 24-hour cache for remote version data.
-- **$PVM_DIR/.env**: The generated file containing active version exports.
+- **$PVM_DIR/remote_cache-<target-triple>.json**: 24-hour cache for the remote version index, scoped per target triple (e.g. `linux-x86_64`).
+- **$PVM_DIR/.env_update[_<shell-pid>]**: Short-lived files written per shell invocation; the shell wrapper sources them to mutate the parent shell's environment.
 
 ### Module Responsibilities
 - `src/cli.rs`: Command definitions using `clap`.
@@ -46,7 +46,7 @@ When running `git commit -m "..."` in the shell (like Zsh/Bash), backticks are i
 - **Interactivity:** Use `dialoguer` for menus and confirmations.
 - **Icons:** Use `colored` for status icons: `✓` (green), `✗` (red), `↻` (blue), `💡` (yellow).
 - **Async:** Use `tokio` for runtime and `reqwest` for all network I/O.
-- **Data Integrity:** Use `fs4` file locking when writing to `.env` or `remote_cache.json`.
+- **Data Integrity:** Use file locking (`std::fs::File::lock` / `lock_shared` / `unlock`, stable since Rust 1.89) when writing to env update files or the remote cache.
 
 ## Testing & Validation
 ### Testing Protocol
