@@ -45,7 +45,14 @@ fn get_target_triple() -> Result<&'static str> {
 
 pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
     let pvm_dir = crate::fs::get_pvm_dir()?;
-    let cache_path = pvm_dir.join(REMOTE_CACHE_FILE);
+    let target = get_target_triple()?;
+    // Cache is filtered by target triple, so the filename must include it
+    // to prevent cross-arch reuse when $PVM_DIR is shared (e.g. via NFS).
+    let cache_path = pvm_dir.join(format!(
+        "{}-{}.json",
+        REMOTE_CACHE_FILE.trim_end_matches(".json"),
+        target
+    ));
 
     // 1. Try to load from valid cache
     if cache_path.exists()
@@ -96,7 +103,6 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
         .context("Failed to parse remote version JSON")?;
     spinner.finish_and_clear();
 
-    let target = get_target_triple()?;
     let suffix = format!("-{}.tar.gz", target);
 
     let mut versions_map: std::collections::HashMap<String, Vec<String>> =

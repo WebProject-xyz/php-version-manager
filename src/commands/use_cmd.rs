@@ -108,20 +108,9 @@ impl Use {
         let env_file = fs::get_env_update_path(None)?;
         fs::write_env_file_locked(&env_file, &format!("{}\n{}", export_str1, export_str2))?;
 
-        // Also update the current Rust binary's environment so spawned subs (or interactive loop) see it
-        unsafe {
-            std::env::set_var(MULTISHELL_PATH_VAR, &bin_dir);
-            if let Some(path) = std::env::var_os("PATH") {
-                let mut new_path = std::ffi::OsString::new();
-                new_path.push(&bin_dir);
-                #[cfg(windows)]
-                new_path.push(";");
-                #[cfg(not(windows))]
-                new_path.push(":");
-                new_path.push(&path);
-                std::env::set_var("PATH", new_path);
-            }
-        }
+        // Note: process-global env is intentionally NOT mutated here. std::env::set_var
+        // is unsound in a multi-threaded tokio runtime, and the wrapper sources env_file
+        // into the parent shell on exit, so subsequent pvm invocations see the new PATH.
 
         Ok(())
     }
