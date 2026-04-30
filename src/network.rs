@@ -17,11 +17,13 @@ use std::time::Duration;
 const CACHE_DURATION: Duration = Duration::from_secs(24 * 60 * 60); // 24 hours
 const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+const USER_AGENT: &str = concat!("pvm/", env!("CARGO_PKG_VERSION"));
 
-fn http_client() -> Result<Client> {
+pub(crate) fn http_client() -> Result<Client> {
     Client::builder()
         .connect_timeout(HTTP_CONNECT_TIMEOUT)
         .timeout(HTTP_REQUEST_TIMEOUT)
+        .user_agent(USER_AGENT)
         .build()
         .context("Failed to initialize HTTP client")
 }
@@ -32,7 +34,7 @@ struct RemoteFile {
     is_dir: bool,
 }
 
-fn get_target_triple() -> Result<&'static str> {
+pub(crate) fn get_target_triple() -> Result<&'static str> {
     use std::env::consts::{ARCH, OS};
     match (OS, ARCH) {
         ("linux", "x86_64") => Ok("linux-x86_64"),
@@ -41,6 +43,45 @@ fn get_target_triple() -> Result<&'static str> {
         ("macos", "aarch64") => Ok("macos-aarch64"),
         _ => anyhow::bail!("Unsupported OS/Architecture: {}-{}", OS, ARCH),
     }
+}
+
+pub(crate) fn build_download_progress_bar(total_size: Option<u64>) -> Result<ProgressBar> {
+    let pb = if let Some(size) = total_size {
+        let pb = ProgressBar::new(size);
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
+            .progress_chars("#>-"));
+        pb
+    } else {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(ProgressStyle::default_spinner().template(
+            "{spinner:.green} [{elapsed_precise}] {bytes} downloaded ({bytes_per_sec})",
+        )?);
+        pb
+    };
+    Ok(pb)
+}
+
+// Stream the response into a temp file to avoid materializing the whole archive in memory,
+// returning a handle rewound to position 0 so the caller can feed it to a decoder.
+pub(crate) async fn stream_to_tempfile(
+    response: reqwest::Response,
+    pb: &ProgressBar,
+) -> Result<File> {
+    let mut tmp = tempfile::tempfile().context("Failed to create temporary archive file")?;
+    let mut downloaded: u64 = 0;
+    let mut stream = response.bytes_stream();
+    while let Some(item) = stream.next().await {
+        let chunk = item.context("Error while downloading chunk")?;
+        tmp.write_all(&chunk)
+            .context("Failed to write archive chunk to temp file")?;
+        downloaded += chunk.len() as u64;
+        pb.set_position(downloaded);
+    }
+    tmp.flush().context("Failed to flush temp archive file")?;
+    tmp.seek(SeekFrom::Start(0))
+        .context("Failed to rewind temp archive file")?;
+    Ok(tmp)
 }
 
 pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
@@ -222,37 +263,8 @@ pub async fn download_and_extract(
             resolved_version, package
         ))?;
 
-    let total_size = response.content_length();
-
-    let pb = if let Some(size) = total_size {
-        let pb = ProgressBar::new(size);
-        pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
-            .progress_chars("#>-"));
-        pb
-    } else {
-        let pb = ProgressBar::new_spinner();
-        pb.set_style(ProgressStyle::default_spinner().template(
-            "{spinner:.green} [{elapsed_precise}] {bytes} downloaded ({bytes_per_sec})",
-        )?);
-        pb
-    };
-
-    // Stream the archive into a temp file to avoid materializing the whole tarball in memory.
-    let mut tmp = tempfile::tempfile().context("Failed to create temporary archive file")?;
-    let mut downloaded: u64 = 0;
-    let mut stream = response.bytes_stream();
-    while let Some(item) = stream.next().await {
-        let chunk = item.context("Error while downloading chunk")?;
-        tmp.write_all(&chunk)
-            .context("Failed to write archive chunk to temp file")?;
-        downloaded += chunk.len() as u64;
-        pb.set_position(downloaded);
-    }
-    tmp.flush().context("Failed to flush temp archive file")?;
-    tmp.seek(SeekFrom::Start(0))
-        .context("Failed to rewind temp archive file")?;
-
+    let pb = build_download_progress_bar(response.content_length())?;
+    let tmp = stream_to_tempfile(response, &pb).await?;
     pb.finish_with_message(format!("Downloaded package {}", package));
 
     let tar = GzDecoder::new(tmp);

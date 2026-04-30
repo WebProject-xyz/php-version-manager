@@ -28,6 +28,24 @@ fn test_version_short() {
 }
 
 #[test]
+fn test_self_update_help() {
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.arg("self-update").arg("--help");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("--apply"));
+}
+
+#[test]
+fn test_help_lists_self_update() {
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.arg("--help");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("self-update"));
+}
+
+#[test]
 fn test_ls_empty() {
     let temp_dir = tempfile::tempdir().unwrap();
 
