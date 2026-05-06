@@ -1,3 +1,9 @@
+## [1.1.1](https://github.com/WebProject-xyz/php-version-manager/compare/v1.1.0...v1.1.1) (2026-05-06)
+
+### Bug Fixes
+
+* **ci:** pin build matrix toolchain to 1.95.0 ([4b8fbdd](https://github.com/WebProject-xyz/php-version-manager/commit/4b8fbdd2faa9cb33e2bcd200ad74c63eb35a1c66)), closes [#20](https://github.com/WebProject-xyz/php-version-manager/issues/20)
+
 ## [1.1.0](https://github.com/WebProject-xyz/php-version-manager/compare/v1.0.4...v1.1.0) (2026-04-29)
 
 ### Features
