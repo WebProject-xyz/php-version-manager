@@ -20,8 +20,7 @@ struct GhRelease {
     tag_name: String,
 }
 
-fn current_version() -> Result<semver::Version> {
-    let raw = env!("PVM_VERSION");
+fn parse_pvm_version(raw: &str) -> Result<semver::Version> {
     let token = raw.split_whitespace().next().unwrap_or(raw);
     let trimmed = token.trim_start_matches('v');
     // git-describe extras (e.g. "-2-gabc") are not valid semver; drop them.
@@ -34,6 +33,10 @@ fn current_version() -> Result<semver::Version> {
                 core, raw
             )
         })
+}
+
+fn current_version() -> Result<semver::Version> {
+    parse_pvm_version(env!("PVM_VERSION"))
 }
 
 fn parse_remote_version(tag: &str) -> Result<semver::Version> {
@@ -197,5 +200,52 @@ impl SelfUpdate {
         );
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn v(major: u64, minor: u64, patch: u64) -> semver::Version {
+        semver::Version::new(major, minor, patch)
+    }
+
+    #[test]
+    fn parse_pvm_version_strips_leading_v() {
+        assert_eq!(parse_pvm_version("v1.2.3").unwrap(), v(1, 2, 3));
+    }
+
+    #[test]
+    fn parse_pvm_version_drops_git_describe_suffix() {
+        assert_eq!(parse_pvm_version("1.2.3-2-gabc").unwrap(), v(1, 2, 3));
+        assert_eq!(parse_pvm_version("v1.2.3-2-gabc").unwrap(), v(1, 2, 3));
+    }
+
+    #[test]
+    fn parse_pvm_version_takes_first_whitespace_token() {
+        // build.rs may embed "VERSION (commit ...)" forms.
+        assert_eq!(
+            parse_pvm_version("1.2.3 (abcd1234 2026-01-01)").unwrap(),
+            v(1, 2, 3)
+        );
+    }
+
+    #[test]
+    fn parse_pvm_version_falls_back_to_cargo_pkg_version_on_unknown() {
+        let parsed = parse_pvm_version("unknown").unwrap();
+        let pkg = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+        assert_eq!(parsed, pkg);
+    }
+
+    #[test]
+    fn parse_remote_version_strips_leading_v() {
+        assert_eq!(parse_remote_version("v1.2.3").unwrap(), v(1, 2, 3));
+        assert_eq!(parse_remote_version("1.2.3").unwrap(), v(1, 2, 3));
+    }
+
+    #[test]
+    fn parse_remote_version_rejects_garbage() {
+        assert!(parse_remote_version("not-a-version").is_err());
     }
 }
