@@ -1,3 +1,4 @@
+use crate::constants::{ENV_UPDATE_FILE, PVM_DIR_VAR};
 use std::path::Path;
 
 pub trait Shell {
@@ -7,15 +8,49 @@ pub trait Shell {
     fn wrapper_fn(&self) -> String;
 }
 
+/// Quote a string for POSIX shells (bash/zsh) by wrapping it in single quotes
+/// and escaping any embedded single quotes via the `'\''` idiom.
+fn posix_single_quote(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('\'');
+    for c in value.chars() {
+        if c == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(c);
+        }
+    }
+    out.push('\'');
+    out
+}
+
+/// Quote a string for fish by wrapping it in single quotes and escaping `\` and `'`.
+fn fish_single_quote(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('\'');
+    for c in value.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\'' => out.push_str("\\'"),
+            other => out.push(other),
+        }
+    }
+    out.push('\'');
+    out
+}
+
 pub struct Bash;
 
 impl Shell for Bash {
     fn path(&self, path: &Path) -> String {
-        format!("export PATH=\"{}:$PATH\"", path.display())
+        format!(
+            "export PATH={}:\"$PATH\"",
+            posix_single_quote(&path.display().to_string())
+        )
     }
 
     fn set_env_var(&self, name: &str, value: &str) -> String {
-        format!("export {}=\"{}\"", name, value)
+        format!("export {}={}", name, posix_single_quote(value))
     }
 
     fn use_on_cd(&self) -> String {
@@ -35,27 +70,33 @@ fi
     }
 
     fn wrapper_fn(&self) -> String {
-        "
-export PATH=\"$HOME/.local/share/pvm/bin:$PATH\"
+        format!(
+            "
+export PATH=\"${{{}}}/bin:$PATH\"
 
-pvm() {
+pvm() {{
   local command=$1
   if [[ \"$command\" == \"env\" ]]; then
     command pvm \"$@\"
   else
-    local env_file=\"$PVM_DIR/.env_update\"
-    rm -f \"$env_file\" 2>/dev/null
-    command pvm \"$@\"
-    local exit_code=$?
-    if [[ -f \"$env_file\" ]]; then
-      eval \"$(cat \"$env_file\")\"
-      rm -f \"$env_file\"
+    if [[ -n \"${{{}}}\" && -d \"${{{}}}\" ]]; then
+      local env_file=\"${{{}}}/{}_$$_${{RANDOM}}${{RANDOM}}_$(date +%s)\"
+      [[ -f \"$env_file\" ]] && command rm -f \"$env_file\" 2>/dev/null
+      PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm \"$@\"
+      local exit_code=$?
+      if [[ -f \"$env_file\" ]]; then
+        eval \"$(cat \"$env_file\")\"
+        command rm -f \"$env_file\" 2>/dev/null
+      fi
+      return $exit_code
+    else
+      command pvm \"$@\"
     fi
-    return $exit_code
   fi
-}
-"
-        .to_string()
+}}
+",
+            PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, ENV_UPDATE_FILE
+        )
     }
 }
 
@@ -63,11 +104,14 @@ pub struct Zsh;
 
 impl Shell for Zsh {
     fn path(&self, path: &Path) -> String {
-        format!("export PATH=\"{}:$PATH\"", path.display())
+        format!(
+            "export PATH={}:\"$PATH\"",
+            posix_single_quote(&path.display().to_string())
+        )
     }
 
     fn set_env_var(&self, name: &str, value: &str) -> String {
-        format!("export {}=\"{}\"", name, value)
+        format!("export {}={}", name, posix_single_quote(value))
     }
 
     fn use_on_cd(&self) -> String {
@@ -84,27 +128,33 @@ add-zsh-hook chpwd _pvm_cd_hook
     }
 
     fn wrapper_fn(&self) -> String {
-        "
-export PATH=\"$HOME/.local/share/pvm/bin:$PATH\"
+        format!(
+            "
+export PATH=\"${{{}}}/bin:$PATH\"
 
-pvm() {
+pvm() {{
   local command=$1
   if [[ \"$command\" == \"env\" ]]; then
     command pvm \"$@\"
   else
-    local env_file=\"$PVM_DIR/.env_update\"
-    rm -f \"$env_file\" 2>/dev/null
-    command pvm \"$@\"
-    local exit_code=$?
-    if [[ -f \"$env_file\" ]]; then
-      eval \"$(cat \"$env_file\")\"
-      rm -f \"$env_file\"
+    if [[ -n \"${{{}}}\" && -d \"${{{}}}\" ]]; then
+      local env_file=\"${{{}}}/{}_$$_${{RANDOM}}${{RANDOM}}_$(date +%s)\"
+      [[ -f \"$env_file\" ]] && command rm -f \"$env_file\" 2>/dev/null
+      PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm \"$@\"
+      local exit_code=$?
+      if [[ -f \"$env_file\" ]]; then
+        eval \"$(cat \"$env_file\")\"
+        command rm -f \"$env_file\" 2>/dev/null
+      fi
+      return $exit_code
+    else
+      command pvm \"$@\"
     fi
-    return $exit_code
   fi
-}
-"
-        .to_string()
+}}
+",
+            PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, ENV_UPDATE_FILE
+        )
     }
 }
 
@@ -112,11 +162,14 @@ pub struct Fish;
 
 impl Shell for Fish {
     fn path(&self, path: &Path) -> String {
-        format!("set -gx PATH \"{}\" $PATH", path.display())
+        format!(
+            "set -gx PATH {} $PATH",
+            fish_single_quote(&path.display().to_string())
+        )
     }
 
     fn set_env_var(&self, name: &str, value: &str) -> String {
-        format!("set -gx {} \"{}\"", name, value)
+        format!("set -gx {} {}", name, fish_single_quote(value))
     }
 
     fn use_on_cd(&self) -> String {
@@ -131,27 +184,35 @@ end
     }
 
     fn wrapper_fn(&self) -> String {
-        "
-set -gx PATH \"$HOME/.local/share/pvm/bin\" $PATH
+        format!(
+            "
+set -gx PATH \"${}/bin\" $PATH
 
 function pvm
     set command $argv[1]
     if test \"$command\" = \"env\"
         command pvm $argv
     else
-        set env_file \"$PVM_DIR/.env_update\"
-        rm -f \"$env_file\" 2>/dev/null
-        command pvm $argv
-        set exit_code $status
-        if test -f \"$env_file\"
-            eval (cat \"$env_file\")
-            rm -f \"$env_file\"
+        if test -n \"${}\"; and test -d \"${}\"
+            set env_file \"${}/{}_$fish_pid\"_(random)(random)_(date +%s)
+            if test -f \"$env_file\"
+                command rm -f \"$env_file\" &>/dev/null
+            end
+            PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm $argv
+            set exit_code $status
+            if test -f \"$env_file\"
+                source \"$env_file\"
+                command rm -f \"$env_file\" &>/dev/null
+            end
+            return $exit_code
+        else
+            command pvm $argv
         end
-        return $exit_code
     end
 end
-"
-        .to_string()
+",
+            PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, ENV_UPDATE_FILE
+        )
     }
 }
 
@@ -176,7 +237,7 @@ mod tests {
         let path = std::path::Path::new("/home/user/.local/share/pvm/versions/8.3.1/bin");
         assert_eq!(
             bash.path(path),
-            "export PATH=\"/home/user/.local/share/pvm/versions/8.3.1/bin:$PATH\""
+            "export PATH='/home/user/.local/share/pvm/versions/8.3.1/bin':\"$PATH\""
         );
     }
 
@@ -185,7 +246,16 @@ mod tests {
         let bash = Bash;
         assert_eq!(
             bash.set_env_var("PVM_MULTISHELL_PATH", "/some/path"),
-            "export PVM_MULTISHELL_PATH=\"/some/path\""
+            "export PVM_MULTISHELL_PATH='/some/path'"
+        );
+    }
+
+    #[test]
+    fn test_bash_set_env_escapes_special_chars() {
+        let bash = Bash;
+        assert_eq!(
+            bash.set_env_var("X", "evil$(whoami)`id`\"$PATH\"'quote"),
+            "export X='evil$(whoami)`id`\"$PATH\"'\\''quote'"
         );
     }
 
@@ -195,7 +265,7 @@ mod tests {
         let path = std::path::Path::new("/home/user/.local/share/pvm/versions/8.3.1/bin");
         assert_eq!(
             zsh.path(path),
-            "export PATH=\"/home/user/.local/share/pvm/versions/8.3.1/bin:$PATH\""
+            "export PATH='/home/user/.local/share/pvm/versions/8.3.1/bin':\"$PATH\""
         );
     }
 
@@ -205,7 +275,13 @@ mod tests {
         let path = std::path::Path::new("/home/user/.local/share/pvm/versions/8.3.1/bin");
         assert_eq!(
             fish.path(path),
-            "set -gx PATH \"/home/user/.local/share/pvm/versions/8.3.1/bin\" $PATH"
+            "set -gx PATH '/home/user/.local/share/pvm/versions/8.3.1/bin' $PATH"
         );
+    }
+
+    #[test]
+    fn test_fish_set_env_escapes_special_chars() {
+        let fish = Fish;
+        assert_eq!(fish.set_env_var("X", "a'b\\c"), "set -gx X 'a\\'b\\\\c'");
     }
 }

@@ -47,6 +47,7 @@ fn test_env_bash() {
     cmd.arg("env").arg("--shell=bash");
     cmd.assert()
         .success()
+        .stdout(predicate::str::contains("export PVM_DIR="))
         .stdout(predicate::str::contains("export PATH="));
 }
 

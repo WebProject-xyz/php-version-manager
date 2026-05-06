@@ -1,5 +1,6 @@
+use crate::constants::{MULTISHELL_PATH_VAR, PHP_VERSION_FILE};
 use crate::{fs, shell, update};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use colored::Colorize;
 use dialoguer::{Confirm, Select, theme::ColorfulTheme};
@@ -71,12 +72,13 @@ impl Use {
         }
 
         // Smart prompt logic
-        if Path::new(".php-version").exists()
-            && let Ok(current_file_ver) = std::fs::read_to_string(".php-version")
+        if Path::new(PHP_VERSION_FILE).exists()
+            && let Ok(current_file_ver) = std::fs::read_to_string(PHP_VERSION_FILE)
             && current_file_ver.trim() != version
         {
             let prompt = format!(
-                "A .php-version file is present ({}). Do you want to apply this change to the directory?",
+                "A {} file is present ({}). Do you want to apply this change to the directory?",
+                PHP_VERSION_FILE,
                 current_file_ver.trim().yellow()
             );
             if Confirm::with_theme(&ColorfulTheme::default())
@@ -85,8 +87,14 @@ impl Use {
                 .interact_opt()?
                 .unwrap_or(false)
             {
-                std::fs::write(".php-version", &version).ok();
-                eprintln!("{} Updated .php-version to {}", "✓".green(), version.bold());
+                std::fs::write(PHP_VERSION_FILE, &version)
+                    .with_context(|| format!("Failed to update {}", PHP_VERSION_FILE))?;
+                eprintln!(
+                    "{} Updated {} to {}",
+                    "✓".green(),
+                    PHP_VERSION_FILE,
+                    version.bold()
+                );
             }
         }
 
@@ -94,24 +102,15 @@ impl Use {
         let s = shell::detect_shell();
 
         // These evaluate in the user's shell hook via wrapper
-        let export_str1 = s.set_env_var("PVM_MULTISHELL_PATH", &bin_dir.to_string_lossy());
+        let export_str1 = s.set_env_var(MULTISHELL_PATH_VAR, &bin_dir.to_string_lossy());
         let export_str2 = s.path(&bin_dir);
 
-        let pvm_dir = fs::get_pvm_dir()?;
-        let env_file = pvm_dir.join(".env_update");
-        std::fs::write(&env_file, format!("{}\n{}", export_str1, export_str2)).ok();
+        let env_file = fs::get_env_update_path(None)?;
+        fs::write_env_file_locked(&env_file, &format!("{}\n{}", export_str1, export_str2))?;
 
-        // Also update the current Rust binary's environment so spawned subs (or interactive loop) see it
-        unsafe {
-            std::env::set_var("PVM_MULTISHELL_PATH", &bin_dir);
-            if let Some(path) = std::env::var_os("PATH") {
-                let mut new_path = std::ffi::OsString::new();
-                new_path.push(&bin_dir);
-                new_path.push(":");
-                new_path.push(&path);
-                std::env::set_var("PATH", new_path);
-            }
-        }
+        // Note: process-global env is intentionally NOT mutated here. std::env::set_var
+        // is unsound in a multi-threaded tokio runtime, and the wrapper sources env_file
+        // into the parent shell on exit, so subsequent pvm invocations see the new PATH.
 
         Ok(())
     }

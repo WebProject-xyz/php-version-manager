@@ -18,7 +18,7 @@ impl Init {
         let mut major_minors = HashSet::new();
         let mut options = Vec::new();
 
-        for v in all_versions.iter().rev() {
+        for (v, _) in all_versions.iter().rev() {
             // Start from newest
             let parts: Vec<&str> = v.split('.').collect();
             if parts.len() >= 2 {

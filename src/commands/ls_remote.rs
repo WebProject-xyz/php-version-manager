@@ -13,13 +13,14 @@ pub struct LsRemote {
 
 impl LsRemote {
     pub async fn call(self) -> Result<()> {
-        let mut versions = network::get_available_versions().await?;
+        let mut versions_info = network::get_available_versions().await?;
 
         if let Some(prefix) = &self.version_prefix {
-            versions.retain(|v| v.starts_with(prefix) || v == prefix);
+            let prefix_dot = format!("{}.", prefix);
+            versions_info.retain(|(v, _)| v == prefix || v.starts_with(&prefix_dot));
         }
 
-        if versions.is_empty() {
+        if versions_info.is_empty() {
             println!("{} No remote versions found.", "💡".yellow());
             return Ok(());
         }
@@ -33,7 +34,7 @@ impl LsRemote {
         let mut minors = std::collections::BTreeMap::new();
         let mut highest_overall = None;
 
-        for v in &versions {
+        for (v, _) in &versions_info {
             highest_overall = Some(v.clone());
             let parts: Vec<&str> = v.split('.').collect();
             if parts.len() >= 2 {
@@ -62,11 +63,18 @@ impl LsRemote {
         target_versions.push("".to_string()); // Unselectable divider
 
         // Build the rest of the flat list
-        for v in versions.iter().rev() {
+        for (v, pkgs) in versions_info.iter().rev() {
+            let pkgs_str = pkgs.join(", ");
             if installed.contains(v) {
-                display_items.push(format!("{} {} {}", "✓".green(), v, "(installed)".dimmed()));
+                display_items.push(format!(
+                    "{} {} {} [{}]",
+                    "✓".green(),
+                    v,
+                    "(installed)".dimmed(),
+                    pkgs_str.cyan()
+                ));
             } else {
-                display_items.push(format!("  {}", v));
+                display_items.push(format!("  {} [{}]", v, pkgs_str.cyan()));
             }
             target_versions.push(v.clone());
         }
