@@ -138,5 +138,4 @@ jobs:
         with:
           tag_name: v${{ needs.release.outputs.new_release_version }}
           files: ${{ matrix.asset_name }}.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          token: ${{ steps.generate_token.outputs.token }}
