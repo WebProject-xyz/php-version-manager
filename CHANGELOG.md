@@ -1,3 +1,9 @@
+## [1.1.2](https://github.com/WebProject-xyz/php-version-manager/compare/v1.1.1...v1.1.2) (2026-05-06)
+
+### Bug Fixes
+
+* **ci:** pass App token via 'token' input to action-gh-release ([#22](https://github.com/WebProject-xyz/php-version-manager/issues/22)) ([abeeac3](https://github.com/WebProject-xyz/php-version-manager/commit/abeeac3aa6e53cd35c34f20957a9f6b91e232d67)), closes [softprops/action-gh-release#751](https://github.com/softprops/action-gh-release/issues/751) [#20](https://github.com/WebProject-xyz/php-version-manager/issues/20)
+
 ## [1.1.1](https://github.com/WebProject-xyz/php-version-manager/compare/v1.1.0...v1.1.1) (2026-05-06)
 
 ### Bug Fixes
