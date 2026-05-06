@@ -29,7 +29,9 @@ fn test_version_short() {
 
 #[test]
 fn test_self_update_help() {
+    let temp_dir = tempfile::tempdir().unwrap();
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
     cmd.arg("self-update").arg("--help");
     cmd.assert()
         .success()
@@ -38,7 +40,9 @@ fn test_self_update_help() {
 
 #[test]
 fn test_help_lists_self_update() {
+    let temp_dir = tempfile::tempdir().unwrap();
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
     cmd.arg("--help");
     cmd.assert()
         .success()

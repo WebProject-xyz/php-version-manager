@@ -26,12 +26,14 @@ fn current_version() -> Result<semver::Version> {
     let trimmed = token.trim_start_matches('v');
     // git-describe extras (e.g. "-2-gabc") are not valid semver; drop them.
     let core = trimmed.split('-').next().unwrap_or(trimmed);
-    semver::Version::parse(core).with_context(|| {
-        format!(
-            "Failed to parse current pvm version '{}' from '{}'",
-            core, raw
-        )
-    })
+    semver::Version::parse(core)
+        .or_else(|_| semver::Version::parse(env!("CARGO_PKG_VERSION")))
+        .with_context(|| {
+            format!(
+                "Failed to parse current pvm version '{}' from '{}'",
+                core, raw
+            )
+        })
 }
 
 fn parse_remote_version(tag: &str) -> Result<semver::Version> {
@@ -174,7 +176,7 @@ impl SelfUpdate {
             .with_prompt(format!("Update pvm to {}?", remote_str).bold().to_string())
             .default(true)
             .interact_opt()
-            .unwrap_or(Some(false))
+            .context("Failed to read update confirmation from terminal")?
             .unwrap_or(false);
 
         if !confirmed {
