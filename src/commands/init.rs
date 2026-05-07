@@ -59,6 +59,7 @@ impl Init {
             // Call use programmatically
             let use_cmd = crate::commands::use_cmd::Use {
                 version: Some(selected.clone()),
+                silent: false,
             };
             use_cmd.call().await?;
         }

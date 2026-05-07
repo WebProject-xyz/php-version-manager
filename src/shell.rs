@@ -57,7 +57,7 @@ impl Shell for Bash {
         "
 _pvm_cd_hook() {
   if [[ -f .php-version ]]; then
-    pvm use \"$(cat .php-version)\" || true
+    pvm use --silent \"$(cat .php-version)\" || true
   fi
 }
 if [[ -n \"$BASH_VERSION\" ]]; then
@@ -118,7 +118,7 @@ impl Shell for Zsh {
         "
 _pvm_cd_hook() {
   if [[ -f .php-version ]]; then
-    pvm use \"$(cat .php-version)\" || true
+    pvm use --silent \"$(cat .php-version)\" || true
   fi
 }
 autoload -U add-zsh-hook
@@ -176,7 +176,7 @@ impl Shell for Fish {
         "
 function _pvm_cd_hook --on-variable PWD
     if test -f .php-version
-        pvm use (cat .php-version)
+        pvm use --silent (cat .php-version)
     end
 end
 "

@@ -172,18 +172,17 @@ pub fn get_aliased_versions() -> Result<Vec<VersionItem>> {
     Ok(items)
 }
 
-pub fn resolve_local_version(requested: &str) -> Result<String> {
+pub fn try_resolve_local_version(requested: &str) -> Result<Option<String>> {
     if requested == "latest" {
-        return get_aliased_versions()?
+        return Ok(get_aliased_versions()?
             .into_iter()
             .find(|item| item.display.starts_with("latest"))
-            .map(|item| item.version)
-            .ok_or_else(|| anyhow::anyhow!("No PHP versions are currently installed."));
+            .map(|item| item.version));
     }
 
     let installed = list_installed_versions()?;
     if installed.contains(&requested.to_string()) {
-        return Ok(requested.to_string());
+        return Ok(Some(requested.to_string()));
     }
 
     let prefix = format!("{}.", requested);
@@ -192,11 +191,17 @@ pub fn resolve_local_version(requested: &str) -> Result<String> {
         .filter(|v| v.starts_with(&prefix))
         .collect();
 
-    if let Some(latest) = matching.last() {
-        return Ok((*latest).clone());
-    }
+    Ok(matching.last().map(|s| (*s).clone()))
+}
 
-    anyhow::bail!("PHP {} is not installed locally.", requested)
+pub fn resolve_local_version(requested: &str) -> Result<String> {
+    match try_resolve_local_version(requested)? {
+        Some(v) => Ok(v),
+        None if requested == "latest" => {
+            anyhow::bail!("No PHP versions are currently installed.")
+        }
+        None => anyhow::bail!("PHP {} is not installed locally.", requested),
+    }
 }
 
 #[cfg(test)]
