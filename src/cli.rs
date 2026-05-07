@@ -52,6 +52,10 @@ pub enum Commands {
     /// Initialize a .php-version file in the current directory
     #[clap(name = "init")]
     Init(commands::init::Init),
+
+    /// Check for and apply updates to pvm itself
+    #[clap(name = "self-update")]
+    SelfUpdate(commands::self_update::SelfUpdate),
 }
 
 impl Commands {
@@ -65,6 +69,7 @@ impl Commands {
             Self::Current(cmd) => cmd.call().await,
             Self::Uninstall(cmd) => cmd.call().await,
             Self::Init(cmd) => cmd.call().await,
+            Self::SelfUpdate(cmd) => cmd.call().await,
         }
     }
 }
