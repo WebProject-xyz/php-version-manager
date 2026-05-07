@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/WebProject-xyz/php-version-manager/compare/v1.1.2...v1.2.0) (2026-05-07)
+
+### Features
+
+* **self-update:** add self-update command for in-place pvm upgrades ([#19](https://github.com/WebProject-xyz/php-version-manager/issues/19)) ([d77f0ef](https://github.com/WebProject-xyz/php-version-manager/commit/d77f0efd9d7aa8ef6ed5ca55a3d4524c4ab1ab7c))
+
 ## [1.1.2](https://github.com/WebProject-xyz/php-version-manager/compare/v1.1.1...v1.1.2) (2026-05-06)
 
 ### Bug Fixes
