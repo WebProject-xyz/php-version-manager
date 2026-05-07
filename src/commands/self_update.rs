@@ -3,7 +3,9 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use colored::Colorize;
 use serde::Deserialize;
-use std::io::Write;
+use std::fmt::Write as _;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom, Write};
 
 const GITHUB_REPO: &str = "WebProject-xyz/php-version-manager";
 
@@ -43,6 +45,60 @@ fn parse_remote_version(tag: &str) -> Result<semver::Version> {
     let trimmed = tag.trim_start_matches('v');
     semver::Version::parse(trimmed)
         .with_context(|| format!("Failed to parse remote release tag '{}'", tag))
+}
+
+fn parse_sha256_digest(raw: &str) -> Result<String> {
+    // Accept either bare hex or `sha256sum` output ("<hex>  <filename>"); take first token.
+    let token = raw
+        .split_whitespace()
+        .next()
+        .context("Checksum file is empty")?;
+    if token.len() != 64 || !token.chars().all(|c| c.is_ascii_hexdigit()) {
+        anyhow::bail!("Checksum file does not contain a 64-character hex SHA-256 digest");
+    }
+    Ok(token.to_ascii_lowercase())
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        let _ = write!(s, "{:02x}", b);
+    }
+    s
+}
+
+fn sha256_of_file(file: &mut File) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    file.seek(SeekFrom::Start(0))
+        .context("Failed to rewind archive for hashing")?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .context("Failed to read archive while hashing")?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    file.seek(SeekFrom::Start(0))
+        .context("Failed to rewind archive after hashing")?;
+    Ok(hex_encode(&hasher.finalize()))
+}
+
+async fn fetch_checksum(url: &str) -> Result<String> {
+    let body = network::http_client()?
+        .get(url)
+        .send()
+        .await
+        .context("Failed to download release checksum")?
+        .error_for_status()
+        .context("Server returned an error when downloading release checksum")?
+        .text()
+        .await
+        .context("Failed to read release checksum body")?;
+    parse_sha256_digest(&body)
 }
 
 async fn fetch_latest_release() -> Result<GhRelease> {
@@ -89,8 +145,23 @@ async fn download_and_replace(tag: &str) -> Result<()> {
         .context("Server returned an error when downloading release")?;
 
     let pb = network::build_download_progress_bar(response.content_length())?;
-    let tmp = network::stream_to_tempfile(response, &pb).await?;
+    let mut tmp = network::stream_to_tempfile(response, &pb).await?;
     pb.finish_and_clear();
+
+    let checksum_url = format!("{}.sha256", url);
+    println!("{} Verifying integrity ({})...", "↻".blue(), checksum_url);
+    let expected = fetch_checksum(&checksum_url)
+        .await
+        .context("Failed to fetch SHA-256 checksum for release archive")?;
+    let actual = sha256_of_file(&mut tmp)?;
+    if actual != expected {
+        anyhow::bail!(
+            "Integrity check failed for downloaded release: expected SHA-256 {}, got {}",
+            expected,
+            actual
+        );
+    }
+    println!("{} Checksum OK", "✓".green());
 
     // Stage the new binary in the same directory as the current exe so the rename is atomic
     // (cross-filesystem renames would fail otherwise).
@@ -247,5 +318,69 @@ mod tests {
     #[test]
     fn parse_remote_version_rejects_garbage() {
         assert!(parse_remote_version("not-a-version").is_err());
+    }
+
+    #[test]
+    fn parse_sha256_digest_accepts_bare_hex() {
+        let raw = "a".repeat(64);
+        assert_eq!(parse_sha256_digest(&raw).unwrap(), raw);
+    }
+
+    #[test]
+    fn parse_sha256_digest_accepts_sha256sum_format() {
+        let hex = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let raw = format!("{}  pvm-linux-x86_64.tar.gz\n", hex);
+        assert_eq!(parse_sha256_digest(&raw).unwrap(), hex);
+    }
+
+    #[test]
+    fn parse_sha256_digest_lowercases_input() {
+        let upper = "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789";
+        let lower = upper.to_ascii_lowercase();
+        assert_eq!(parse_sha256_digest(upper).unwrap(), lower);
+    }
+
+    #[test]
+    fn parse_sha256_digest_rejects_short() {
+        assert!(parse_sha256_digest("deadbeef").is_err());
+    }
+
+    #[test]
+    fn parse_sha256_digest_rejects_non_hex() {
+        let raw = "z".repeat(64);
+        assert!(parse_sha256_digest(&raw).is_err());
+    }
+
+    #[test]
+    fn parse_sha256_digest_rejects_empty() {
+        assert!(parse_sha256_digest("").is_err());
+        assert!(parse_sha256_digest("   \n").is_err());
+    }
+
+    #[test]
+    fn sha256_of_file_matches_known_vector() {
+        // SHA-256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+        let mut tmp = tempfile::tempfile().unwrap();
+        tmp.write_all(b"abc").unwrap();
+        tmp.flush().unwrap();
+        let digest = sha256_of_file(&mut tmp).unwrap();
+        assert_eq!(
+            digest,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        // Hashing must rewind so the next reader sees the full content.
+        let mut s = String::new();
+        tmp.read_to_string(&mut s).unwrap();
+        assert_eq!(s, "abc");
+    }
+
+    #[test]
+    fn sha256_of_empty_file() {
+        let mut tmp = tempfile::tempfile().unwrap();
+        let digest = sha256_of_file(&mut tmp).unwrap();
+        assert_eq!(
+            digest,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
     }
 }
