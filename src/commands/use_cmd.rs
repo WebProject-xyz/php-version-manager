@@ -42,8 +42,12 @@ impl Use {
                         return Ok(());
                     }
 
-                    crate::commands::install::execute_install(v).await?;
-                    return Ok(());
+                    // Skip install's own "use now?" prompt — we fall through to
+                    // the activation path below with the freshly installed version.
+                    match crate::commands::install::execute_install_with(v, false).await? {
+                        Some(installed) => installed,
+                        None => return Ok(()),
+                    }
                 }
             },
             None => {
