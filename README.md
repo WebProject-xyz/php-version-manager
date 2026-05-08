@@ -77,3 +77,170 @@ pvm init
 
 ### Auto-Switching
 If you run `pvm init` or manually create a `.php-version` file in a project directory containing `8.3`, PVM will automatically switch to your best local `8.3.x` patch when you `cd` into that folder. The `cd` hook is installed via `pvm env` (Bash, Zsh, or Fish — auto-detected from `$SHELL`).
+
+## Packages
+
+Each PHP version can ship up to three binaries; you pick which during `pvm install` via the MultiSelect prompt. All land under `$PVM_DIR/versions/<full-semver>/bin/`. Upstream reference for all three SAPIs: [static-php.dev — SAPI Reference](https://static-php.dev/en/guide/sapi-reference.html).
+
+| Package | Binary | What it is |
+|---------|--------|------------|
+| `cli` (default) | `php` | Standard command-line PHP — runs scripts, REPL via `php -a`, drives Composer. See [SAPI Reference: CLI](https://static-php.dev/en/guide/sapi-reference.html#cli). |
+| `fpm` | `php-fpm` | FastCGI Process Manager for serving PHP behind nginx/Caddy/Apache. Setup details in the next section + [SAPI Reference: FPM](https://static-php.dev/en/guide/sapi-reference.html#fpm). |
+| `micro` | `micro.sfx` | [phpmicro](https://github.com/easysoft/phpmicro) self-contained executable stub — concat with a `.php` or `.phar` to ship a single-file PHP app. Combining requires the upstream [`spc`](https://static-php.dev/en/guide/getting-started.html) toolchain (`spc micro:combine app.phar --output=app`); pvm only delivers the stub. See [SAPI Reference: Micro](https://static-php.dev/en/guide/sapi-reference.html#micro). |
+
+After `pvm use <version>`, every selected binary is on `$PATH` (CLI as `php`, FPM as `php-fpm`); `micro.sfx` stays at its absolute path since it's a build artifact, not something you invoke directly.
+
+## Running PHP-FPM
+
+> Upstream reference: [static-php.dev — SAPI Reference: FPM](https://static-php.dev/en/guide/sapi-reference.html#fpm) documents the binary's CLI flags (`-y`, `-c`, `-t`), a minimal `php-fpm.conf`, and an nginx FastCGI block. The guide below extends that with service wiring (systemd / launchd) and pvm-specific paths.
+
+PVM downloads a static `php-fpm` binary alongside `php` when you tick the `fpm` package during `pvm install`. The static-php-cli tarball ships only the binary — no `php-fpm.conf`, no pool files, no init script — so you wire those up yourself. The binary lives next to the CLI at:
+
+```
+$PVM_DIR/versions/<full-semver>/bin/php-fpm
+```
+
+`$PVM_DIR` defaults to `~/.local/share/pvm`. After running `pvm use 8.4` it is also on `$PATH` as plain `php-fpm`.
+
+### 1. Install the fpm package
+
+```bash
+pvm install 8.4
+# When the MultiSelect prompt appears, tick "fpm" (and "cli" if you want both).
+pvm use 8.4
+php-fpm -v       # confirm it resolves to the pvm-managed binary
+which php-fpm    # → ~/.local/share/pvm/versions/8.4.x/bin/php-fpm
+```
+
+### 2. Create a minimal config
+
+Put these under `~/.config/php-fpm/` (any path works — the binary takes `-y` and `-c`):
+
+`~/.config/php-fpm/php-fpm.conf`:
+
+```ini
+[global]
+pid = /tmp/php-fpm.pid
+error_log = /tmp/php-fpm.log
+daemonize = no
+
+include = /home/YOU/.config/php-fpm/pool.d/*.conf
+```
+
+`~/.config/php-fpm/pool.d/www.conf`:
+
+```ini
+[www]
+user = YOU
+group = YOU
+listen = 127.0.0.1:9000
+; or a unix socket:
+; listen = /tmp/php-fpm-www.sock
+; listen.owner = YOU
+; listen.group = YOU
+; listen.mode = 0660
+
+pm = dynamic
+pm.max_children = 5
+pm.start_servers = 2
+pm.min_spare_servers = 1
+pm.max_spare_servers = 3
+
+catch_workers_output = yes
+clear_env = no
+```
+
+Replace `YOU` with your username (`whoami`).
+
+### 3. Run it in the foreground
+
+```bash
+# Validate config first
+php-fpm -y ~/.config/php-fpm/php-fpm.conf -t
+
+# Foreground run, logs to stdout
+php-fpm -y ~/.config/php-fpm/php-fpm.conf -F
+
+# With a custom php.ini (the static binary has no compiled-in ini path)
+php-fpm -c ~/.config/php-fpm/php.ini -y ~/.config/php-fpm/php-fpm.conf -F
+```
+
+Flag summary (matches upstream [SAPI Reference: FPM](https://static-php.dev/en/guide/sapi-reference.html#fpm)):
+
+- `-y <file>` — `php-fpm.conf` path (required, no default for static builds)
+- `-c <file>` — `php.ini` path (optional; without it, fpm runs with hard-coded defaults)
+- `-t` — validate config and exit
+- `-F` — stay in foreground (don't fork to daemon)
+- `-v` — print version
+- `-m` — list compiled-in extensions
+
+### 4. Run it as a service
+
+**systemd (Linux, user unit)** — `~/.config/systemd/user/php-fpm.service`:
+
+```ini
+[Unit]
+Description=PHP-FPM (managed by pvm)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/pvm/versions/8.4.18/bin/php-fpm -y %h/.config/php-fpm/php-fpm.conf -F
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now php-fpm
+journalctl --user -u php-fpm -f
+```
+
+Pin the full semver in `ExecStart` (e.g. `8.4.18`) — symlinking to `versions/8.4` is not maintained by pvm, so a future `pvm install 8.4` that resolves to `8.4.19` will not move the service.
+
+**launchd (macOS)** — `~/Library/LaunchAgents/dev.pvm.php-fpm.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.pvm.php-fpm</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOU/.local/share/pvm/versions/8.4.18/bin/php-fpm</string>
+    <string>-y</string>
+    <string>/Users/YOU/.config/php-fpm/php-fpm.conf</string>
+    <string>-F</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/php-fpm.out.log</string>
+  <key>StandardErrorPath</key><string>/tmp/php-fpm.err.log</string>
+</dict>
+</plist>
+```
+
+```bash
+launchctl load ~/Library/LaunchAgents/dev.pvm.php-fpm.plist
+```
+
+### 5. Hook up nginx
+
+```nginx
+location ~ \.php$ {
+    fastcgi_pass   127.0.0.1:9000;
+    fastcgi_index  index.php;
+    fastcgi_param  SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    include        fastcgi_params;
+}
+```
+
+### Notes
+
+- The static binary is self-contained — no system libphp / no extension `.so` files. Run `php-fpm -m` to list the extensions baked into your build.
+- Switching the active CLI via `pvm use 8.3` does **not** restart your fpm service; the service runs whichever absolute path you wired into the unit/plist. Bump the path and reload when you upgrade.
+- For multiple parallel versions (e.g. 8.3 + 8.4), run two services on different ports/sockets — `pvm` does not multiplex fpm for you.
