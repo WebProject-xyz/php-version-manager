@@ -11,12 +11,45 @@ use std::path::Path;
 pub struct Use {
     /// The version to use (omit for interactive list)
     pub version: Option<String>,
+
+    /// Skip interactive prompts when the requested version is missing (used by shell hooks).
+    #[arg(long, hide = true)]
+    pub silent: bool,
 }
 
 impl Use {
     pub async fn call(self) -> Result<()> {
         let mut version = match self.version {
-            Some(ref v) => fs::resolve_local_version(v)?,
+            Some(ref v) => match fs::try_resolve_local_version(v)? {
+                Some(resolved) => resolved,
+                None => {
+                    if self.silent {
+                        return Ok(());
+                    }
+
+                    let prompt = format!(
+                        "PHP {} is not installed locally. Do you want to install it now?",
+                        v.bold()
+                    );
+                    let install_now = Confirm::with_theme(&ColorfulTheme::default())
+                        .with_prompt(&prompt)
+                        .default(true)
+                        .interact_opt()?
+                        .unwrap_or(false);
+
+                    if !install_now {
+                        eprintln!("{} Operation cancelled.", "✗".red());
+                        return Ok(());
+                    }
+
+                    // Skip install's own "use now?" prompt — we fall through to
+                    // the activation path below with the freshly installed version.
+                    match crate::commands::install::execute_install_with(v, false).await? {
+                        Some(installed) => installed,
+                        None => return Ok(()),
+                    }
+                }
+            },
             None => {
                 let items = fs::get_aliased_versions()?;
                 if items.is_empty() {

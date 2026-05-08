@@ -124,3 +124,27 @@ fn test_use_silent_export() {
         .success()
         .stdout(predicate::str::contains("export PVM_MULTISHELL_PATH").not());
 }
+
+#[test]
+fn test_use_silent_skips_missing_version() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let env_file = temp_dir.path().join("custom_env_update");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env("PVM_UPDATE_MODE", "disabled");
+    cmd.env("PVM_ENV_UPDATE_PATH", &env_file);
+    cmd.current_dir(temp_dir.path());
+    cmd.arg("use").arg("--silent").arg("8.3");
+
+    // Silent mode: missing version exits 0 with no output and no env file written.
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::is_empty());
+
+    assert!(
+        !env_file.exists(),
+        "silent mode must not write env file when version is missing"
+    );
+}

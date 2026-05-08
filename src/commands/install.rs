@@ -12,6 +12,16 @@ pub struct Install {
 }
 
 pub async fn execute_install(version: &str) -> Result<()> {
+    execute_install_with(version, true).await.map(|_| ())
+}
+
+/// `prompt_activation` controls the trailing "Do you want to use PHP X now?" prompt and the
+/// resulting env-file write. Callers like `pvm use` set it to `false` because they will fall
+/// through to their own activation path with the returned resolved version.
+pub async fn execute_install_with(
+    version: &str,
+    prompt_activation: bool,
+) -> Result<Option<String>> {
     let versions_dir = fs::get_versions_dir()?;
     std::fs::create_dir_all(&versions_dir)?;
 
@@ -50,7 +60,7 @@ pub async fn execute_install(version: &str) -> Result<()> {
 
     if selections.is_empty() {
         println!("{} No packages selected. Operation cancelled.", "✗".red());
-        return Ok(());
+        return Ok(None);
     }
 
     let selected_packages: Vec<String> = selections
@@ -94,6 +104,18 @@ pub async fn execute_install(version: &str) -> Result<()> {
 
     // Only the cli package places a `php` binary on PATH; without it, switching is meaningless.
     let cli_selected = selected_packages.iter().any(|p| p == "cli");
+
+    if !prompt_activation {
+        if !cli_selected {
+            println!(
+                "{} The 'cli' package was not selected; this version cannot be activated via PATH.",
+                "💡".yellow()
+            );
+            return Ok(None);
+        }
+        return Ok(Some(resolved_version));
+    }
+
     let use_now = cli_selected
         && dialoguer::Confirm::with_theme(&theme)
             .with_prompt(
@@ -120,20 +142,21 @@ pub async fn execute_install(version: &str) -> Result<()> {
         // is unsound in a multi-threaded tokio runtime, and the wrapper sources env_file
         // into the parent shell on exit, so subsequent pvm invocations see the new PATH.
         println!("{} Switched to PHP {}", "✓".green(), v.bold());
+        Ok(Some(resolved_version))
     } else if !cli_selected {
         println!(
             "{} The 'cli' package was not selected; this version cannot be activated via PATH.",
             "💡".yellow()
         );
+        Ok(None)
     } else {
         println!(
             "{} To use this version later, run `{}`",
             "💡".yellow(),
             format!("pvm use {}", version).bold()
         );
+        Ok(Some(resolved_version))
     }
-
-    Ok(())
 }
 
 impl Install {

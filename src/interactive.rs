@@ -34,7 +34,10 @@ pub async fn run_root_menu() -> Result<()> {
 
         let res = match choice {
             0 => {
-                let cmd = commands::use_cmd::Use { version: None };
+                let cmd = commands::use_cmd::Use {
+                    version: None,
+                    silent: false,
+                };
                 cmd.call().await
             }
             1 => {
@@ -46,7 +49,7 @@ pub async fn run_root_menu() -> Result<()> {
                 cmd.call().await
             }
             3 => {
-                let cmd = commands::use_cmd::Use { version: None };
+                let cmd = commands::ls::Ls;
                 cmd.call().await
             }
             4 => {
