@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/WebProject-xyz/php-version-manager/compare/v1.2.0...v1.2.1) (2026-05-08)
+
+### Bug Fixes
+
+* **use:** prompt to install when target version missing ([#24](https://github.com/WebProject-xyz/php-version-manager/issues/24)) ([ceec711](https://github.com/WebProject-xyz/php-version-manager/commit/ceec7113d7c3bb8f52db0c69700fcf31dd75060a))
+
 ## [1.2.0](https://github.com/WebProject-xyz/php-version-manager/compare/v1.1.2...v1.2.0) (2026-05-07)
 
 ### Features
