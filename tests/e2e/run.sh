@@ -14,6 +14,10 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/_lib.sh"
 
+# Refuse to run on a dev machine — we mutate $HOME/.local/share/pvm and /tmp.
+# Override with PVM_E2E_FORCE=1 if you really mean it.
+e2e_require_sandbox
+
 for tool in curl tar nc expect cgi-fcgi pgrep; do
     command -v "$tool" >/dev/null 2>&1 \
         || fail "missing required tool: $tool (install: expect libfcgi-bin)"
@@ -30,7 +34,8 @@ if [[ -n "${PVM_BIN:-}" ]]; then
     PVM_BIN="$PVM_DIR/bin/pvm"
     ok "using pre-built pvm at $PVM_BIN"
 else
-    curl -fsSL https://raw.githubusercontent.com/WebProject-xyz/php-version-manager/main/install.sh | bash
+    curl -fsSL --connect-timeout 10 --max-time 60 \
+        https://raw.githubusercontent.com/WebProject-xyz/php-version-manager/main/install.sh | bash
     PVM_BIN="$HOME/.local/share/pvm/bin/pvm"
     ok "installed via install.sh"
 fi
@@ -49,7 +54,8 @@ esac
 VFILTER="${PVM_VERSION_MAJOR_MINOR:-8.5}"
 ESCAPED_VFILTER="${VFILTER//./\\.}"
 
-INDEX_JSON=$(curl -fsSL "https://dl.static-php.dev/static-php-cli/bulk/?format=json")
+INDEX_JSON=$(curl -fsSL --connect-timeout 10 --max-time 30 \
+    "https://dl.static-php.dev/static-php-cli/bulk/?format=json")
 ALL_VERS=$(echo "$INDEX_JSON" \
     | grep -oE "\"php-${ESCAPED_VFILTER}\\.[0-9]+-cli-${TGT}\\.tar\\.gz\"" \
     | sed -E "s|\"php-(${ESCAPED_VFILTER}\\.[0-9]+)-cli-${TGT}\\.tar\\.gz\"|\\1|" \
@@ -71,6 +77,7 @@ E2E_STATE=$(mktemp -d)
 FPM_PID_FILE=/tmp/php-fpm.pid
 FPM_LOG_FILE=/tmp/php-fpm.log
 FPM_SOCK=/tmp/php-fpm-www.sock
+FPM_TCP_ADDR="${FPM_TCP_ADDR:-127.0.0.1:9000}"
 
 cleanup() {
     if [[ -f "$E2E_STATE/fpm.pid" ]]; then
@@ -82,7 +89,7 @@ cleanup() {
 trap cleanup EXIT
 
 export PVM_BIN VFILTER LATEST PREVIOUS VDIR MISSING_VER E2E_STATE
-export FPM_PID_FILE FPM_LOG_FILE FPM_SOCK
+export FPM_PID_FILE FPM_LOG_FILE FPM_SOCK FPM_TCP_ADDR
 
 # ---------------------------------------------------------------------------
 # Run each case as a fresh bash subprocess

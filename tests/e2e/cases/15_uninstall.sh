@@ -8,9 +8,11 @@ step "pvm uninstall $PREVIOUS"
 
 "$PVM_BIN" uninstall "$PREVIOUS"
 
-[[ ! -d "$HOME/.local/share/pvm/versions/$PREVIOUS" ]] \
-    && ok "versions/$PREVIOUS directory removed" \
-    || fail "uninstall left versions/$PREVIOUS in place"
+if [[ ! -d "${PVM_DIR:-$HOME/.local/share/pvm}/versions/$PREVIOUS" ]]; then
+    ok "versions/$PREVIOUS directory removed"
+else
+    fail "uninstall left versions/$PREVIOUS in place"
+fi
 
 if "$PVM_BIN" ls 2>&1 | grep -q "$PREVIOUS"; then
     fail "pvm ls still shows $PREVIOUS after uninstall"

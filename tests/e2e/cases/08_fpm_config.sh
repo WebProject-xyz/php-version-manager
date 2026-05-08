@@ -6,6 +6,7 @@ source "$(dirname "$0")/../_lib.sh"
 step "Write README php-fpm config and validate via -t"
 
 USER_NAME="$(whoami)"
+FPM_TCP_ADDR="${FPM_TCP_ADDR:-127.0.0.1:9000}"
 mkdir -p "$HOME/.config/php-fpm/pool.d"
 
 cat > "$HOME/.config/php-fpm/php-fpm.conf" <<EOF
@@ -21,7 +22,7 @@ cat > "$HOME/.config/php-fpm/pool.d/www.conf" <<EOF
 [www]
 user = $USER_NAME
 group = $USER_NAME
-listen = 127.0.0.1:9000
+listen = $FPM_TCP_ADDR
 
 pm = dynamic
 pm.max_children = 5

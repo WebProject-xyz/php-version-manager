@@ -96,7 +96,7 @@ After `pvm use <version>`, every selected binary is on `$PATH` (CLI as `php`, FP
 
 PVM downloads a static `php-fpm` binary alongside `php` when you tick the `fpm` package during `pvm install`. The static-php-cli tarball ships only the binary — no `php-fpm.conf`, no pool files, no init script — so you wire those up yourself. The binary lives next to the CLI at:
 
-```
+```text
 $PVM_DIR/versions/<full-semver>/bin/php-fpm
 ```
 

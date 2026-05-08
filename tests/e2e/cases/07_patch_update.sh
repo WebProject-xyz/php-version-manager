@@ -10,7 +10,7 @@ fi
 
 # pvm rate-limits the patch-update check to once per 24h via this guard file;
 # clear it so the prompt actually fires when this case runs after another `pvm use`.
-rm -f "$HOME/.local/share/pvm/.update_check_guard"
+rm -f "${PVM_DIR:-$HOME/.local/share/pvm}/.update_check_guard"
 
 step "pvm use $VFILTER offers $LATEST over $PREVIOUS"
 

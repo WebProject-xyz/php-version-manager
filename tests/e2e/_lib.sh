@@ -33,11 +33,35 @@ fcgi_call() {
     local php_body="$2"
     local script_dir
     script_dir=$(mktemp -d)
+    # RETURN trap fires even when set -e in the caller would otherwise abort
+    # mid-call due to a non-zero cgi-fcgi exit, so the temp dir is always removed.
+    trap 'rm -rf "$script_dir"' RETURN
     echo "<?php $php_body" > "$script_dir/run.php"
     SCRIPT_FILENAME="$script_dir/run.php" \
     SCRIPT_NAME=/run.php \
     REQUEST_METHOD=GET \
     QUERY_STRING="" \
         cgi-fcgi -bind -connect "$connect"
-    rm -rf "$script_dir"
+}
+
+# Safety: refuse to mutate the user's local pvm state outside Docker or GitHub Actions.
+# Both run.sh and any case sourcing this lib hit $HOME/.local/share/pvm, /tmp, and
+# $HOME/.config/php-fpm — running on a dev machine would clobber the user's setup.
+e2e_require_sandbox() {
+    if [[ "${PVM_E2E_FORCE:-}" == "1" ]]; then
+        warn "PVM_E2E_FORCE=1 — running outside Docker / GitHub Actions on caller's request"
+        return 0
+    fi
+    if [[ -f /.dockerenv ]]; then
+        return 0
+    fi
+    if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+        return 0
+    fi
+    if grep -qE '(/docker/|containerd|kubepods)' /proc/1/cgroup 2>/dev/null; then
+        return 0
+    fi
+    fail "tests/e2e mutates \$HOME/.local/share/pvm, /tmp/php-fpm.*, and ~/.config/php-fpm.
+       Run inside Docker (see tests/e2e/README.md) or GitHub Actions.
+       Override at your own risk with PVM_E2E_FORCE=1."
 }

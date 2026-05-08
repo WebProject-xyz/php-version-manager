@@ -4,7 +4,7 @@ set -euo pipefail
 source "$(dirname "$0")/../_lib.sh"
 
 step "-c php.ini effective inside worker (memory_limit, expose_php)"
-RESPONSE=$(fcgi_call "127.0.0.1:9000" \
+RESPONSE=$(fcgi_call "$FPM_TCP_ADDR" \
     'echo "MEM=" . ini_get("memory_limit") . "\n"; echo "EXPOSE=" . (ini_get("expose_php") ? "On" : "Off") . "\n";' \
     2>&1)
 echo "$RESPONSE"
