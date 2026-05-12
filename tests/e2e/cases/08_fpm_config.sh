@@ -56,9 +56,11 @@ EOF
 
 ok "wrote php-fpm.conf, pool.d/{www,sock}.conf, php.ini"
 
-"$VDIR/php-fpm" -y "$HOME/.config/php-fpm/php-fpm.conf" -t \
-    && ok "php-fpm -t OK" \
-    || fail "php-fpm -t failed"
+if "$VDIR/php-fpm" -y "$HOME/.config/php-fpm/php-fpm.conf" -t; then
+    ok "php-fpm -t OK"
+else
+    fail "php-fpm -t failed"
+fi
 
 "$VDIR/php-fpm" -v
 MOD_COUNT=$("$VDIR/php-fpm" -m | grep -cE '^[a-z]' || true)

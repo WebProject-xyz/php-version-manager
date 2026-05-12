@@ -35,7 +35,7 @@ if ! nc -z "$TCP_HOST" "$TCP_PORT" 2>/dev/null; then
 fi
 [[ -S "$FPM_SOCK" ]] || fail "unix socket $FPM_SOCK not created"
 
-WORKER_COUNT=$(pgrep -P "$FPM_PID" 2>/dev/null | wc -l || echo 0)
+WORKER_COUNT=$(pgrep -P "$FPM_PID" 2>/dev/null | wc -l || true)
 if [[ "$WORKER_COUNT" -ge 2 ]]; then
     ok "$WORKER_COUNT workers spawned"
 else
