@@ -11,7 +11,7 @@ on:
 jobs:
   tests:
     name: Lint & Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     steps:
       - name: Checkout repository
@@ -37,7 +37,7 @@ jobs:
   e2e-fpm:
     name: e2e tests - linux
     needs: tests
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -73,7 +73,7 @@ jobs:
   release:
     name: Semantic Release
     needs: [tests, e2e-fpm]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
@@ -124,7 +124,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+            target: blacksmith-4vcpu-ubuntu-2404
             artifact_name: pvm
             asset_name: pvm-linux-x86_64
           - os: macos-latest
