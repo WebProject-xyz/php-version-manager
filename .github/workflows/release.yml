@@ -34,9 +34,45 @@ jobs:
       - name: Run Tests
         run: cargo test
 
+  e2e-fpm:
+    name: e2e tests - linux
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Install runtime deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends netcat-openbsd expect libfcgi-bin
+
+      - name: Build pvm (release)
+        run: cargo build --release
+
+      - name: Run E2E suite
+        env:
+          PVM_BIN: ${{ github.workspace }}/target/release/pvm
+          PVM_VERSION_MAJOR_MINOR: '8.5'
+        run: bash tests/e2e/run.sh
+
+      - name: Upload fpm logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fpm-logs
+          path: |
+            /tmp/fpm.stdout
+            /tmp/fpm.stderr
+          if-no-files-found: ignore
+
   release:
     name: Semantic Release
-    needs: tests
+    needs: [tests, e2e-fpm]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     permissions:
