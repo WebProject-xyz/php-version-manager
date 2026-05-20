@@ -73,6 +73,9 @@ pvm uninstall 8.3        # aliases: pvm rm 8.3 / pvm remove 8.3
 
 # Write a .php-version file for this directory (interactive picker)
 pvm init
+
+# Check for and apply updates to pvm itself
+pvm self-update          # optional: pvm self-update --apply to apply automatically
 ```
 
 ### Auto-Switching

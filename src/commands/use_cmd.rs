@@ -51,24 +51,71 @@ impl Use {
                 }
             },
             None => {
-                let items = fs::get_aliased_versions()?;
-                if items.is_empty() {
-                    eprintln!("{} No PHP versions are currently installed.", "💡".yellow());
-                    return Ok(());
+                let mut resolved_version = None;
+                if let Ok(content) = std::fs::read_to_string(PHP_VERSION_FILE) {
+                    let trimmed = content.trim().to_string();
+                    if !trimmed.is_empty() {
+                        match fs::try_resolve_local_version(&trimmed)? {
+                            Some(resolved) => {
+                                resolved_version = Some(resolved);
+                            }
+                            None => {
+                                if !self.silent {
+                                    let prompt = format!(
+                                        "PHP {} (from {}) is not installed locally. Do you want to install it now?",
+                                        trimmed.bold(),
+                                        PHP_VERSION_FILE.bold()
+                                    );
+                                    let install_now =
+                                        Confirm::with_theme(&ColorfulTheme::default())
+                                            .with_prompt(&prompt)
+                                            .default(true)
+                                            .interact_opt()?
+                                            .unwrap_or(false);
+
+                                    if install_now {
+                                        if let Some(installed) =
+                                            crate::commands::install::execute_install_with(
+                                                &trimmed, false,
+                                            )
+                                            .await?
+                                        {
+                                            resolved_version = Some(installed);
+                                        }
+                                    } else {
+                                        eprintln!("{} Operation cancelled.", "✗".red());
+                                        return Ok(());
+                                    }
+                                } else {
+                                    return Ok(());
+                                }
+                            }
+                        }
+                    }
                 }
 
-                let displays: Vec<String> = items.iter().map(|i| i.display.clone()).collect();
-                let selection = Select::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Select a locally installed PHP version to use")
-                    .default(0)
-                    .items(&displays)
-                    .interact_opt()?;
-
-                match selection {
-                    Some(idx) => items[idx].version.clone(),
-                    None => {
-                        eprintln!("{} Operation cancelled.", "✗".red());
+                if let Some(resolved) = resolved_version {
+                    resolved
+                } else {
+                    let items = fs::get_aliased_versions()?;
+                    if items.is_empty() {
+                        eprintln!("{} No PHP versions are currently installed.", "💡".yellow());
                         return Ok(());
+                    }
+
+                    let displays: Vec<String> = items.iter().map(|i| i.display.clone()).collect();
+                    let selection = Select::with_theme(&ColorfulTheme::default())
+                        .with_prompt("Select a locally installed PHP version to use")
+                        .default(0)
+                        .items(&displays)
+                        .interact_opt()?;
+
+                    match selection {
+                        Some(idx) => items[idx].version.clone(),
+                        None => {
+                            eprintln!("{} Operation cancelled.", "✗".red());
+                            return Ok(());
+                        }
                     }
                 }
             }

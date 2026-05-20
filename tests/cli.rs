@@ -148,3 +148,50 @@ fn test_use_silent_skips_missing_version() {
         "silent mode must not write env file when version is missing"
     );
 }
+
+#[test]
+fn test_uninstall_fpm_only_success() {
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    // Mock an installed version with ONLY php-fpm (no php)
+    let bin_dir = temp_dir.path().join("versions").join("8.3.1").join("bin");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    std::fs::write(bin_dir.join("php-fpm"), "").unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("uninstall").arg("8.3.1");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Successfully uninstalled PHP 8.3.1",
+    ));
+
+    // Verify it actually deleted the folder
+    assert!(!temp_dir.path().join("versions").join("8.3.1").exists());
+}
+
+#[test]
+fn test_use_php_version_file() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let env_file = temp_dir.path().join("custom_env_update");
+
+    // Write .php-version
+    std::fs::write(temp_dir.path().join(".php-version"), "8.3.1\n").unwrap();
+
+    // Mock the installed version
+    let bin_dir = temp_dir.path().join("versions").join("8.3.1").join("bin");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    std::fs::write(bin_dir.join("php"), "").unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env("PVM_UPDATE_MODE", "disabled");
+    cmd.env("PVM_ENV_UPDATE_PATH", &env_file);
+    cmd.current_dir(temp_dir.path());
+    cmd.arg("use"); // no version argument
+
+    cmd.assert().success();
+
+    assert!(env_file.exists());
+    let env_content = std::fs::read_to_string(env_file).unwrap();
+    assert!(env_content.contains("8.3.1"));
+}
