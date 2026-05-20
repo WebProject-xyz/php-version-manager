@@ -86,7 +86,7 @@ PVM acts as a single-binary CLI. If called without arguments or when interactive
 - **Build Release Binary:** `cargo build --release` (configured size-optimized in `Cargo.toml`: `opt-level = "z"`, LTO, `panic = "abort"`, stripped).
 - **Local Install from Source:** `./build.sh` (compiles release, copies to `$PVM_DIR/bin/pvm`).
 - **Lint (CI Gate):** `cargo clippy -- -D warnings`
-- **Format Check (CI Gate):** `cargo fmt -- --check`
+- **Format Check (CI Gate):** `cargo fmt --all -- --check`
 
 ### Release Process
 - **Semantic Release:** Driven by `semantic-release` from Conventional Commits on `main`.
