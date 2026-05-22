@@ -282,11 +282,13 @@ pub async fn download_and_extract(
         use std::os::unix::fs::PermissionsExt;
         if let Ok(entries) = std::fs::read_dir(&bin_dir) {
             for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_file() {
-                    let mut perms = std::fs::metadata(&path)?.permissions();
+                if let (Ok(metadata), true) = (
+                    entry.metadata(),
+                    entry.file_type().map(|ft| ft.is_file()).unwrap_or(false),
+                ) {
+                    let mut perms = metadata.permissions();
                     perms.set_mode(0o755);
-                    std::fs::set_permissions(&path, perms).ok();
+                    std::fs::set_permissions(entry.path(), perms).ok();
                 }
             }
         }

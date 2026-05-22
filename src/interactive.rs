@@ -45,7 +45,10 @@ pub async fn run_root_menu() -> Result<()> {
                 cmd.call().await
             }
             2 => {
-                let cmd = commands::uninstall::Uninstall { version: None };
+                let cmd = commands::uninstall::Uninstall {
+                    version: None,
+                    yes: false,
+                };
                 cmd.call().await
             }
             3 => {
