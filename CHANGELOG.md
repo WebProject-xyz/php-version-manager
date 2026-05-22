@@ -1,3 +1,9 @@
+## [1.3.1](https://github.com/WebProject-xyz/php-version-manager/compare/v1.3.0...v1.3.1) (2026-05-22)
+
+### Bug Fixes
+
+* **ci:** use x86_64-unknown-linux-gnu as Rust target in build matrix ([58f3b40](https://github.com/WebProject-xyz/php-version-manager/commit/58f3b40dfcb3aeb348ad7f0b4b95b09525ade595))
+
 ## [1.3.0](https://github.com/WebProject-xyz/php-version-manager/compare/v1.2.1...v1.3.0) (2026-05-22)
 
 ### Features
