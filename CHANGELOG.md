@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/WebProject-xyz/php-version-manager/compare/v1.2.1...v1.3.0) (2026-05-22)
+
+### Features
+
+* implement pvm optimizations, robust uninstall logic and php-version auto-detection ([#30](https://github.com/WebProject-xyz/php-version-manager/issues/30)) ([ccaa069](https://github.com/WebProject-xyz/php-version-manager/commit/ccaa0697a6060da8966aebeb5899fb929d14a1f6))
+
 ## [1.2.1](https://github.com/WebProject-xyz/php-version-manager/compare/v1.2.0...v1.2.1) (2026-05-08)
 
 ### Bug Fixes
