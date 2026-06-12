@@ -1,3 +1,9 @@
+## [1.3.2](https://github.com/WebProject-xyz/php-version-manager/compare/v1.3.1...v1.3.2) (2026-06-12)
+
+### Bug Fixes
+
+* **deps:** update deps ([32da128](https://github.com/WebProject-xyz/php-version-manager/commit/32da12857725986b4e11adf2b26e50de20b134f0))
+
 ## [1.3.1](https://github.com/WebProject-xyz/php-version-manager/compare/v1.3.0...v1.3.1) (2026-05-22)
 
 ### Bug Fixes
