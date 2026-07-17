@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod current;
 pub mod default_cmd;
 pub mod env;

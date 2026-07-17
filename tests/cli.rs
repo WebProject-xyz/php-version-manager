@@ -424,6 +424,51 @@ fn test_uninstall_fpm_only_success() {
 }
 
 #[test]
+fn test_cache_clear_removes_cache_file_and_is_idempotent() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_remote_cache(temp_dir.path(), &[("8.9.7", &["cli"])]);
+
+    let target = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+    let cache_file = temp_dir
+        .path()
+        .join(format!("remote_cache-{}.json", target));
+    assert!(cache_file.exists());
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("cache").arg("clear");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Removed 1"));
+
+    assert!(
+        !cache_file.exists(),
+        "cache file must be deleted from PVM_DIR"
+    );
+
+    // Second run: nothing left to remove, still succeeds.
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("cache").arg("clear");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Removed 0"));
+}
+
+#[test]
+fn test_cache_clear_tolerates_missing_pvm_dir() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let missing_dir = temp_dir.path().join("does-not-exist");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", &missing_dir);
+    cmd.arg("cache").arg("clear");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Removed 0"));
+}
+
+#[test]
 fn test_use_php_version_file() {
     let temp_dir = tempfile::tempdir().unwrap();
     let env_file = temp_dir.path().join("custom_env_update");

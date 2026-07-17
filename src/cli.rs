@@ -60,6 +60,10 @@ pub enum Commands {
     /// Check for and apply updates to pvm itself
     #[clap(name = "self-update")]
     SelfUpdate(commands::self_update::SelfUpdate),
+
+    /// Manage the remote version cache
+    #[clap(name = "cache")]
+    Cache(commands::cache::Cache),
 }
 
 impl Commands {
@@ -75,6 +79,7 @@ impl Commands {
             Self::Uninstall(cmd) => cmd.call().await,
             Self::Init(cmd) => cmd.call().await,
             Self::SelfUpdate(cmd) => cmd.call().await,
+            Self::Cache(cmd) => cmd.call().await,
         }
     }
 }
