@@ -2,7 +2,6 @@ use crate::constants::{BASE_URL, REMOTE_CACHE_FILE};
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 
-use futures_util::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
 use std::path::Path;
@@ -65,14 +64,16 @@ pub(crate) fn build_download_progress_bar(total_size: Option<u64>) -> Result<Pro
 // Stream the response into a temp file to avoid materializing the whole archive in memory,
 // returning a handle rewound to position 0 so the caller can feed it to a decoder.
 pub(crate) async fn stream_to_tempfile(
-    response: reqwest::Response,
+    mut response: reqwest::Response,
     pb: &ProgressBar,
 ) -> Result<File> {
     let mut tmp = tempfile::tempfile().context("Failed to create temporary archive file")?;
     let mut downloaded: u64 = 0;
-    let mut stream = response.bytes_stream();
-    while let Some(item) = stream.next().await {
-        let chunk = item.context("Error while downloading chunk")?;
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .context("Error while downloading chunk")?
+    {
         tmp.write_all(&chunk)
             .context("Failed to write archive chunk to temp file")?;
         downloaded += chunk.len() as u64;

@@ -1241,7 +1241,6 @@ dependencies = [
  "dirs",
  "env_logger",
  "flate2",
- "futures-util",
  "indicatif",
  "log",
  "predicates",
