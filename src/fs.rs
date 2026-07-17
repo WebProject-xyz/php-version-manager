@@ -116,17 +116,10 @@ pub fn write_env_file_locked(path: &PathBuf, content: &str) -> Result<()> {
 }
 
 pub fn get_aliased_versions() -> Result<Vec<VersionItem>> {
-    let mut installed = list_installed_versions()?;
+    let installed = list_installed_versions()?;
     if installed.is_empty() {
         return Ok(Vec::new());
     }
-
-    // Sort semantic versions cleanly
-    installed.sort_by(|a, b| {
-        let a_parts: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
-        let b_parts: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
-        a_parts.cmp(&b_parts)
-    });
 
     let mut items = Vec::new();
 
