@@ -63,7 +63,8 @@ pub fn list_installed_versions() -> Result<Vec<String>> {
         }
     }
 
-    crate::utils::sort_versions(&mut versions);
+    // Directory names are always full semver ("8.3.1"); unparsable ones sort first.
+    versions.sort_by_cached_key(|v| semver::Version::parse(v).ok());
     Ok(versions)
 }
 

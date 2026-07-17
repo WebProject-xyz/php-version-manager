@@ -6,7 +6,6 @@ mod interactive;
 mod network;
 mod shell;
 mod update;
-mod utils;
 
 use anyhow::Result;
 use clap::Parser;
