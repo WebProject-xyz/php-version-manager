@@ -135,7 +135,7 @@ pub async fn execute_install_with(
         let export_str1 = s.set_env_var(MULTISHELL_PATH_VAR, &bin_dir.to_string_lossy());
         let export_str2 = s.path(&bin_dir);
 
-        let env_file = crate::fs::get_env_update_path(None)?;
+        let env_file = crate::fs::get_env_update_path()?;
         crate::fs::write_env_file_locked(&env_file, &format!("{}\n{}", export_str1, export_str2))?;
 
         // Note: process-global env is intentionally NOT mutated here. std::env::set_var

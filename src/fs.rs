@@ -80,10 +80,7 @@ pub fn get_current_version() -> String {
     "system".to_string()
 }
 
-pub fn get_env_update_path(override_path: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(path) = override_path {
-        return Ok(path);
-    }
+pub fn get_env_update_path() -> Result<PathBuf> {
     if let Ok(env_path) = std::env::var("PVM_ENV_UPDATE_PATH") {
         return Ok(PathBuf::from(env_path));
     }
