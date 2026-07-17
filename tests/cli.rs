@@ -260,6 +260,35 @@ fn test_help_lists_self_update() {
 }
 
 #[test]
+fn test_ls_non_tty_prints_plain_list() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli", "fpm"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("ls");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("latest (8.9.6)"))
+        .stdout(predicate::str::contains("cli, fpm"));
+}
+
+#[test]
+fn test_use_no_version_non_tty_fails_with_hint() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env("PVM_UPDATE_MODE", "disabled");
+    cmd.current_dir(temp_dir.path());
+    cmd.arg("use");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("No version given"));
+}
+
+#[test]
 fn test_ls_empty() {
     let temp_dir = tempfile::tempdir().unwrap();
 
