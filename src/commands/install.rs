@@ -11,10 +11,6 @@ pub struct Install {
     pub version: Option<String>,
 }
 
-pub async fn execute_install(version: &str) -> Result<()> {
-    execute_install_with(version, true).await.map(|_| ())
-}
-
 /// `prompt_activation` controls the trailing "Do you want to use PHP X now?" prompt and the
 /// resulting env-file write. Callers like `pvm use` set it to `false` because they will fall
 /// through to their own activation path with the returned resolved version.
@@ -162,7 +158,7 @@ pub async fn execute_install_with(
 impl Install {
     pub async fn call(self) -> Result<()> {
         match self.version {
-            Some(v) => execute_install(&v).await,
+            Some(v) => execute_install_with(&v, true).await.map(|_| ()),
             None => {
                 let ls_cmd = crate::commands::ls_remote::LsRemote {
                     version_prefix: None,

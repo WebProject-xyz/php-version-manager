@@ -102,7 +102,7 @@ impl LsRemote {
         };
 
         if !installed.contains(selected) {
-            crate::commands::install::execute_install(selected).await?;
+            crate::commands::install::execute_install_with(selected, true).await?;
         } else {
             println!(
                 "{} PHP {} is already installed.",
