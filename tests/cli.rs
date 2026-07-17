@@ -5,12 +5,7 @@ use predicates::prelude::*;
 fn seed_remote_cache(pvm_dir: &std::path::Path, versions: &[(&str, &[&str])]) {
     let data: Vec<(String, Vec<String>)> = versions
         .iter()
-        .map(|(v, pkgs)| {
-            (
-                v.to_string(),
-                pkgs.iter().map(|p| p.to_string()).collect(),
-            )
-        })
+        .map(|(v, pkgs)| (v.to_string(), pkgs.iter().map(|p| p.to_string()).collect()))
         .collect();
     let target = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
     std::fs::create_dir_all(pvm_dir).unwrap();
@@ -47,6 +42,52 @@ fn test_install_resolve_failure_uses_cache_offline() {
     cmd.assert().failure().stderr(predicate::str::contains(
         "Could not resolve a remotely available version matching '7.0'",
     ));
+}
+
+#[test]
+fn test_ls_remote_plain_listing() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_remote_cache(
+        temp_dir.path(),
+        &[("8.9.6", &["cli", "fpm"]), ("8.9.7", &["cli"])],
+    );
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("ls-remote");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("8.9.7 [cli]"))
+        .stdout(predicate::str::contains("8.9.6"))
+        .stdout(predicate::str::contains("(installed)"));
+}
+
+#[test]
+fn test_ls_remote_prefix_filter() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_remote_cache(temp_dir.path(), &[("8.8.1", &["cli"]), ("8.9.7", &["cli"])]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("ls-remote").arg("8.9");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("8.9.7"))
+        .stdout(predicate::str::contains("8.8.1").not());
+}
+
+#[test]
+fn test_install_no_version_non_tty_fails() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_remote_cache(temp_dir.path(), &[("8.9.7", &["cli"])]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("install");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("No version given"));
 }
 
 #[test]
