@@ -32,9 +32,6 @@ assert_cmd = "2.2.1"
 predicates = "3.1.4"
 tempfile = "3.27.0"
 
-[build-dependencies]
-chrono = "0.4.44"
-
 # Optimize for binary size and performance
 [profile.release]
 opt-level = "z"     # Optimize for size
