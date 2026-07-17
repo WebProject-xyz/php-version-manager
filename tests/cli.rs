@@ -469,6 +469,71 @@ fn test_cache_clear_tolerates_missing_pvm_dir() {
 }
 
 #[test]
+fn test_which_prints_path_of_active_version() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
+
+    let multishell_path = temp_dir.path().join("versions").join("8.9.6").join("bin");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env("PVM_MULTISHELL_PATH", &multishell_path);
+    cmd.arg("which");
+    cmd.assert().success().stdout(predicate::str::contains(
+        multishell_path.join("php").to_string_lossy().into_owned(),
+    ));
+}
+
+#[test]
+fn test_which_resolves_explicit_minor_version() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env_remove("PVM_MULTISHELL_PATH");
+    cmd.arg("which").arg("8.9");
+    cmd.assert().success().stdout(predicate::str::contains(
+        temp_dir
+            .path()
+            .join("versions")
+            .join("8.9.6")
+            .join("bin")
+            .join("php")
+            .to_string_lossy()
+            .into_owned(),
+    ));
+}
+
+#[test]
+fn test_which_no_active_version_fails_with_hint() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env_remove("PVM_MULTISHELL_PATH");
+    cmd.arg("which");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("no pvm-managed PHP is active"));
+}
+
+#[test]
+fn test_which_fpm_only_version_fails() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.9.6", &["fpm"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env_remove("PVM_MULTISHELL_PATH");
+    cmd.arg("which").arg("8.9.6");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("has no cli package"));
+}
+
+#[test]
 fn test_use_php_version_file() {
     let temp_dir = tempfile::tempdir().unwrap();
     let env_file = temp_dir.path().join("custom_env_update");

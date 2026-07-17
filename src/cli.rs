@@ -64,6 +64,10 @@ pub enum Commands {
     /// Manage the remote version cache
     #[clap(name = "cache")]
     Cache(commands::cache::Cache),
+
+    /// Print the path of the active or given PHP binary
+    #[clap(name = "which")]
+    Which(commands::which_cmd::Which),
 }
 
 impl Commands {
@@ -80,6 +84,7 @@ impl Commands {
             Self::Init(cmd) => cmd.call().await,
             Self::SelfUpdate(cmd) => cmd.call().await,
             Self::Cache(cmd) => cmd.call().await,
+            Self::Which(cmd) => cmd.call().await,
         }
     }
 }
