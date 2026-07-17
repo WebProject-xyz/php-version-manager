@@ -39,18 +39,56 @@ fn fish_single_quote(value: &str) -> String {
     out
 }
 
+fn posix_path(path: &Path) -> String {
+    format!(
+        "export PATH={}:\"$PATH\"",
+        posix_single_quote(&path.display().to_string())
+    )
+}
+
+fn posix_set_env_var(name: &str, value: &str) -> String {
+    format!("export {}={}", name, posix_single_quote(value))
+}
+
+fn posix_wrapper_fn() -> String {
+    format!(
+        "
+export PATH=\"${{{}}}/bin:$PATH\"
+
+pvm() {{
+  local command=$1
+  if [[ \"$command\" == \"env\" ]]; then
+    command pvm \"$@\"
+  else
+    if [[ -n \"${{{}}}\" && -d \"${{{}}}\" ]]; then
+      local env_file=\"${{{}}}/{}_$$_${{RANDOM}}${{RANDOM}}_$(date +%s)\"
+      [[ -f \"$env_file\" ]] && command rm -f \"$env_file\" 2>/dev/null
+      PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm \"$@\"
+      local exit_code=$?
+      if [[ -f \"$env_file\" ]]; then
+        eval \"$(cat \"$env_file\")\"
+        command rm -f \"$env_file\" 2>/dev/null
+      fi
+      return $exit_code
+    else
+      command pvm \"$@\"
+    fi
+  fi
+}}
+",
+        PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, ENV_UPDATE_FILE
+    )
+}
+
 pub struct Bash;
 
 impl Shell for Bash {
     fn path(&self, path: &Path) -> String {
-        format!(
-            "export PATH={}:\"$PATH\"",
-            posix_single_quote(&path.display().to_string())
-        )
+        posix_path(path)
     }
 
     fn set_env_var(&self, name: &str, value: &str) -> String {
-        format!("export {}={}", name, posix_single_quote(value))
+        posix_set_env_var(name, value)
     }
 
     fn use_on_cd(&self) -> String {
@@ -70,33 +108,7 @@ fi
     }
 
     fn wrapper_fn(&self) -> String {
-        format!(
-            "
-export PATH=\"${{{}}}/bin:$PATH\"
-
-pvm() {{
-  local command=$1
-  if [[ \"$command\" == \"env\" ]]; then
-    command pvm \"$@\"
-  else
-    if [[ -n \"${{{}}}\" && -d \"${{{}}}\" ]]; then
-      local env_file=\"${{{}}}/{}_$$_${{RANDOM}}${{RANDOM}}_$(date +%s)\"
-      [[ -f \"$env_file\" ]] && command rm -f \"$env_file\" 2>/dev/null
-      PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm \"$@\"
-      local exit_code=$?
-      if [[ -f \"$env_file\" ]]; then
-        eval \"$(cat \"$env_file\")\"
-        command rm -f \"$env_file\" 2>/dev/null
-      fi
-      return $exit_code
-    else
-      command pvm \"$@\"
-    fi
-  fi
-}}
-",
-            PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, ENV_UPDATE_FILE
-        )
+        posix_wrapper_fn()
     }
 }
 
@@ -104,14 +116,11 @@ pub struct Zsh;
 
 impl Shell for Zsh {
     fn path(&self, path: &Path) -> String {
-        format!(
-            "export PATH={}:\"$PATH\"",
-            posix_single_quote(&path.display().to_string())
-        )
+        posix_path(path)
     }
 
     fn set_env_var(&self, name: &str, value: &str) -> String {
-        format!("export {}={}", name, posix_single_quote(value))
+        posix_set_env_var(name, value)
     }
 
     fn use_on_cd(&self) -> String {
@@ -128,33 +137,7 @@ add-zsh-hook chpwd _pvm_cd_hook
     }
 
     fn wrapper_fn(&self) -> String {
-        format!(
-            "
-export PATH=\"${{{}}}/bin:$PATH\"
-
-pvm() {{
-  local command=$1
-  if [[ \"$command\" == \"env\" ]]; then
-    command pvm \"$@\"
-  else
-    if [[ -n \"${{{}}}\" && -d \"${{{}}}\" ]]; then
-      local env_file=\"${{{}}}/{}_$$_${{RANDOM}}${{RANDOM}}_$(date +%s)\"
-      [[ -f \"$env_file\" ]] && command rm -f \"$env_file\" 2>/dev/null
-      PVM_ENV_UPDATE_PATH=\"$env_file\" command pvm \"$@\"
-      local exit_code=$?
-      if [[ -f \"$env_file\" ]]; then
-        eval \"$(cat \"$env_file\")\"
-        command rm -f \"$env_file\" 2>/dev/null
-      fi
-      return $exit_code
-    else
-      command pvm \"$@\"
-    fi
-  fi
-}}
-",
-            PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, PVM_DIR_VAR, ENV_UPDATE_FILE
-        )
+        posix_wrapper_fn()
     }
 }
 
