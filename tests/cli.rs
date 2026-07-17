@@ -133,6 +133,64 @@ fn test_install_already_installed_is_idempotent_non_tty() {
 }
 
 #[test]
+fn test_default_set_show_and_env_activation() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
+
+    // Set the default
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("default").arg("8.9.6");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Default version set to 8.9.6"));
+
+    // Non-TTY 'pvm default' prints it
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("default");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("8.9.6"));
+
+    // 'pvm env' activates it for new shells
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("env").arg("--shell=bash");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("export PVM_MULTISHELL_PATH="))
+        .stdout(predicate::str::contains("versions/8.9.6/bin"));
+
+    // 'pvm default system' clears it again
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("default").arg("system");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Default cleared"));
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("env").arg("--shell=bash");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("PVM_MULTISHELL_PATH").not());
+}
+
+#[test]
+fn test_default_rejects_missing_version() {
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("default").arg("9.9.9");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("not installed locally"));
+}
+
+#[test]
 fn test_help() {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
     cmd.arg("--help");

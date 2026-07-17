@@ -87,6 +87,36 @@ pub fn get_env_update_path() -> Result<PathBuf> {
     Ok(get_pvm_dir()?.join(crate::constants::ENV_UPDATE_FILE))
 }
 
+/// The version new shells start on, persisted via 'pvm default'.
+pub fn get_default_version() -> Result<Option<String>> {
+    let path = get_pvm_dir()?.join(crate::constants::DEFAULT_VERSION_FILE);
+    match std::fs::read_to_string(path) {
+        Ok(content) => {
+            let trimmed = content.trim().to_string();
+            Ok((!trimmed.is_empty()).then_some(trimmed))
+        }
+        Err(_) => Ok(None),
+    }
+}
+
+pub fn set_default_version(version: &str) -> Result<()> {
+    let pvm_dir = get_pvm_dir()?;
+    std::fs::create_dir_all(&pvm_dir)?;
+    std::fs::write(
+        pvm_dir.join(crate::constants::DEFAULT_VERSION_FILE),
+        version,
+    )
+    .context("Failed to write default version file")
+}
+
+pub fn clear_default_version() -> Result<()> {
+    let path = get_pvm_dir()?.join(crate::constants::DEFAULT_VERSION_FILE);
+    if path.exists() {
+        std::fs::remove_file(path).context("Failed to remove default version file")?;
+    }
+    Ok(())
+}
+
 /// Safely writes content to the environment update file with an exclusive lock.
 pub fn write_env_file_locked(path: &PathBuf, content: &str) -> Result<()> {
     use std::io::Write;

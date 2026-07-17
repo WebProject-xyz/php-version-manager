@@ -13,6 +13,7 @@ pub async fn run_root_menu() -> Result<()> {
             "List        (View locally installed versions)",
             "List-Remote (View all available cloud versions)",
             "Current     (Print the currently active PHP version)",
+            "Default     (Set the default PHP version for new shells)",
             "Init        (Initialize a .php-version file)",
             "Exit",
         ];
@@ -28,7 +29,7 @@ pub async fn run_root_menu() -> Result<()> {
             None => break, // Esc/Q exits the menu entirely
         };
 
-        if choice == 7 {
+        if choice == options.len() - 1 {
             break;
         }
 
@@ -71,6 +72,10 @@ pub async fn run_root_menu() -> Result<()> {
                 cmd.call().await
             }
             6 => {
+                let cmd = commands::default_cmd::DefaultCmd { version: None };
+                cmd.call().await
+            }
+            7 => {
                 let cmd = commands::init::Init {};
                 cmd.call().await
             }

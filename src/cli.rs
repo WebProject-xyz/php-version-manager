@@ -45,6 +45,10 @@ pub enum Commands {
     #[clap(name = "current")]
     Current(commands::current::Current),
 
+    /// Set the default PHP version for new shells
+    #[clap(name = "default")]
+    Default(commands::default_cmd::DefaultCmd),
+
     /// Uninstall a PHP version
     #[clap(name = "uninstall", visible_aliases = &["rm", "remove"])]
     Uninstall(commands::uninstall::Uninstall),
@@ -67,6 +71,7 @@ impl Commands {
             Self::Ls(cmd) => cmd.call().await,
             Self::LsRemote(cmd) => cmd.call().await,
             Self::Current(cmd) => cmd.call().await,
+            Self::Default(cmd) => cmd.call().await,
             Self::Uninstall(cmd) => cmd.call().await,
             Self::Init(cmd) => cmd.call().await,
             Self::SelfUpdate(cmd) => cmd.call().await,

@@ -1,4 +1,5 @@
 pub mod current;
+pub mod default_cmd;
 pub mod env;
 pub mod init;
 pub mod install;
