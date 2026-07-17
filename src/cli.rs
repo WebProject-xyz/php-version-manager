@@ -33,6 +33,10 @@ pub enum Commands {
     #[clap(name = "env")]
     Env(commands::env::Env),
 
+    /// Run a command under a specific PHP version
+    #[clap(name = "exec")]
+    Exec(commands::exec_cmd::Exec),
+
     /// List all locally installed PHP versions
     #[clap(name = "list", visible_aliases = &["ls"])]
     Ls(commands::ls::Ls),
@@ -76,6 +80,7 @@ impl Commands {
             Self::Install(cmd) => cmd.call().await,
             Self::Use(cmd) => cmd.call().await,
             Self::Env(cmd) => cmd.call().await,
+            Self::Exec(cmd) => cmd.call().await,
             Self::Ls(cmd) => cmd.call().await,
             Self::LsRemote(cmd) => cmd.call().await,
             Self::Current(cmd) => cmd.call().await,

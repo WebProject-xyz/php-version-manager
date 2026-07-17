@@ -2,6 +2,7 @@ pub mod cache;
 pub mod current;
 pub mod default_cmd;
 pub mod env;
+pub mod exec_cmd;
 pub mod init;
 pub mod install;
 pub mod ls;

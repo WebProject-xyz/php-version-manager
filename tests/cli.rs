@@ -423,6 +423,41 @@ fn test_uninstall_fpm_only_success() {
     assert!(!temp_dir.path().join("versions").join("8.3.1").exists());
 }
 
+#[cfg(unix)]
+#[test]
+fn test_exec_runs_command_and_propagates_exit_code() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
+
+    // Replace the empty fake php binary with a script that prints a marker
+    // and exits with a distinctive code.
+    let php_path = temp_dir.path().join("versions/8.9.6/bin/php");
+    std::fs::write(&php_path, "#!/bin/sh\necho FAKE-PHP-8.9.6\nexit 7\n").unwrap();
+    std::fs::set_permissions(&php_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("exec").arg("8.9.6").arg("php");
+    cmd.assert()
+        .code(7)
+        .stdout(predicate::str::contains("FAKE-PHP-8.9.6"));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_exec_unknown_version_fails() {
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("exec").arg("9.9.9").arg("php").arg("-v");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("not installed locally"));
+}
+
 #[test]
 fn test_cache_clear_removes_cache_file_and_is_idempotent() {
     let temp_dir = tempfile::tempdir().unwrap();
