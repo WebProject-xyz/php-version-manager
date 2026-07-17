@@ -7,6 +7,7 @@ pub mod init;
 pub mod install;
 pub mod ls;
 pub mod ls_remote;
+pub mod prune;
 pub mod self_update;
 pub mod uninstall;
 pub mod use_cmd;

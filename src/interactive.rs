@@ -10,6 +10,7 @@ pub async fn run_root_menu() -> Result<()> {
             "Use         (Switch active PHP version)",
             "Install     (Install a PHP version)",
             "Uninstall   (Remove a PHP version)",
+            "Prune       (Remove superseded patch versions)",
             "List        (View locally installed versions)",
             "List-Remote (View all available cloud versions)",
             "Current     (Print the currently active PHP version)",
@@ -58,24 +59,28 @@ pub async fn run_root_menu() -> Result<()> {
                 cmd.call().await
             }
             3 => {
-                let cmd = commands::ls::Ls;
+                let cmd = commands::prune::Prune { yes: false };
                 cmd.call().await
             }
             4 => {
+                let cmd = commands::ls::Ls;
+                cmd.call().await
+            }
+            5 => {
                 let cmd = commands::ls_remote::LsRemote {
                     version_prefix: None,
                 };
                 cmd.call().await
             }
-            5 => {
+            6 => {
                 let cmd = commands::current::Current {};
                 cmd.call().await
             }
-            6 => {
+            7 => {
                 let cmd = commands::default_cmd::DefaultCmd { version: None };
                 cmd.call().await
             }
-            7 => {
+            8 => {
                 let cmd = commands::init::Init {};
                 cmd.call().await
             }

@@ -569,6 +569,80 @@ fn test_which_fpm_only_version_fails() {
 }
 
 #[test]
+fn test_prune_removes_superseded_versions() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.3.1", &["cli"]);
+    seed_installed_version(temp_dir.path(), "8.3.5", &["cli"]);
+    seed_installed_version(temp_dir.path(), "8.4.2", &["cli"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("prune").arg("-y");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Removed PHP 8.3.1"));
+
+    assert!(!temp_dir.path().join("versions/8.3.1").exists());
+    assert!(temp_dir.path().join("versions/8.3.5").exists());
+    assert!(temp_dir.path().join("versions/8.4.2").exists());
+}
+
+#[test]
+fn test_prune_keeps_active_version() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.3.1", &["cli"]);
+    seed_installed_version(temp_dir.path(), "8.3.5", &["cli"]);
+    seed_installed_version(temp_dir.path(), "8.4.2", &["cli"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env(
+        "PVM_MULTISHELL_PATH",
+        temp_dir.path().join("versions/8.3.1/bin"),
+    );
+    cmd.arg("prune").arg("-y");
+    cmd.assert().success();
+
+    assert!(temp_dir.path().join("versions/8.3.1").exists());
+    assert!(temp_dir.path().join("versions/8.3.5").exists());
+    assert!(temp_dir.path().join("versions/8.4.2").exists());
+}
+
+#[test]
+fn test_prune_repoints_default_version() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.3.1", &["cli"]);
+    seed_installed_version(temp_dir.path(), "8.3.5", &["cli"]);
+    seed_installed_version(temp_dir.path(), "8.4.2", &["cli"]);
+    std::fs::write(temp_dir.path().join("default"), "8.3.1").unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("prune").arg("-y");
+    cmd.assert().success();
+
+    let default = std::fs::read_to_string(temp_dir.path().join("default")).unwrap();
+    assert_eq!(default.trim(), "8.3.5");
+}
+
+#[test]
+fn test_prune_nothing_to_prune() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.3.5", &["cli"]);
+    seed_installed_version(temp_dir.path(), "8.4.2", &["cli"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("prune").arg("-y");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Nothing to prune."));
+
+    assert!(temp_dir.path().join("versions/8.3.5").exists());
+    assert!(temp_dir.path().join("versions/8.4.2").exists());
+}
+
+#[test]
 fn test_use_php_version_file() {
     let temp_dir = tempfile::tempdir().unwrap();
     let env_file = temp_dir.path().join("custom_env_update");

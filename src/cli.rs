@@ -57,6 +57,10 @@ pub enum Commands {
     #[clap(name = "uninstall", visible_aliases = &["rm", "remove"])]
     Uninstall(commands::uninstall::Uninstall),
 
+    /// Remove superseded patch versions
+    #[clap(name = "prune")]
+    Prune(commands::prune::Prune),
+
     /// Initialize a .php-version file in the current directory
     #[clap(name = "init")]
     Init(commands::init::Init),
@@ -86,6 +90,7 @@ impl Commands {
             Self::Current(cmd) => cmd.call().await,
             Self::Default(cmd) => cmd.call().await,
             Self::Uninstall(cmd) => cmd.call().await,
+            Self::Prune(cmd) => cmd.call().await,
             Self::Init(cmd) => cmd.call().await,
             Self::SelfUpdate(cmd) => cmd.call().await,
             Self::Cache(cmd) => cmd.call().await,
