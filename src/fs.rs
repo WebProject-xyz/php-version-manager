@@ -87,14 +87,7 @@ pub fn get_env_update_path(override_path: Option<PathBuf>) -> Result<PathBuf> {
     if let Ok(env_path) = std::env::var("PVM_ENV_UPDATE_PATH") {
         return Ok(PathBuf::from(env_path));
     }
-    let pvm_dir = get_pvm_dir()?;
-    let shell_pid = std::env::var("PVM_SHELL_PID").unwrap_or_default();
-    let filename = if shell_pid.is_empty() {
-        crate::constants::ENV_UPDATE_FILE.to_string()
-    } else {
-        format!("{}_{}", crate::constants::ENV_UPDATE_FILE, shell_pid)
-    };
-    Ok(pvm_dir.join(filename))
+    Ok(get_pvm_dir()?.join(crate::constants::ENV_UPDATE_FILE))
 }
 
 /// Safely writes content to the environment update file with an exclusive lock.
