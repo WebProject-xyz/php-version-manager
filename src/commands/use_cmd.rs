@@ -1,9 +1,10 @@
 use crate::constants::{MULTISHELL_PATH_VAR, PHP_VERSION_FILE};
-use crate::{fs, shell, update};
+use crate::{fs, prompt, shell, update};
 use anyhow::{Context, Result};
 use clap::Parser;
 use colored::Colorize;
-use dialoguer::{Confirm, Select, theme::ColorfulTheme};
+use dialoguer::{Select, theme::ColorfulTheme};
+use std::io::IsTerminal;
 use std::path::Path;
 
 /// Change PHP version
@@ -15,6 +16,10 @@ pub struct Use {
     /// Skip interactive prompts when the requested version is missing (used by shell hooks).
     #[arg(long, hide = true)]
     pub silent: bool,
+
+    /// Auto-approve prompts (install missing versions, patch updates)
+    #[arg(short = 'y', long = "yes")]
+    pub yes: bool,
 }
 
 impl Use {
@@ -27,24 +32,20 @@ impl Use {
                         return Ok(());
                     }
 
-                    let prompt = format!(
+                    let question = format!(
                         "PHP {} is not installed locally. Do you want to install it now?",
                         v.bold()
                     );
-                    let install_now = Confirm::with_theme(&ColorfulTheme::default())
-                        .with_prompt(&prompt)
-                        .default(true)
-                        .interact_opt()?
-                        .unwrap_or(false);
-
-                    if !install_now {
+                    if !prompt::confirm(&question, true, self.yes)? {
                         eprintln!("{} Operation cancelled.", "✗".red());
                         return Ok(());
                     }
 
                     // Skip install's own "use now?" prompt — we fall through to
                     // the activation path below with the freshly installed version.
-                    match crate::commands::install::execute_install_with(v, false).await? {
+                    match crate::commands::install::execute_install_with(v, false, &[], self.yes)
+                        .await?
+                    {
                         Some(installed) => installed,
                         None => return Ok(()),
                     }
@@ -61,22 +62,18 @@ impl Use {
                             }
                             None => {
                                 if !self.silent {
-                                    let prompt = format!(
+                                    let question = format!(
                                         "PHP {} (from {}) is not installed locally. Do you want to install it now?",
                                         trimmed.bold(),
                                         PHP_VERSION_FILE.bold()
                                     );
-                                    let install_now =
-                                        Confirm::with_theme(&ColorfulTheme::default())
-                                            .with_prompt(&prompt)
-                                            .default(true)
-                                            .interact_opt()?
-                                            .unwrap_or(false);
-
-                                    if install_now {
+                                    if prompt::confirm(&question, true, self.yes)? {
                                         if let Some(installed) =
                                             crate::commands::install::execute_install_with(
-                                                &trimmed, false,
+                                                &trimmed,
+                                                false,
+                                                &[],
+                                                self.yes,
                                             )
                                             .await?
                                         {
@@ -121,25 +118,33 @@ impl Use {
             }
         };
 
-        if let Ok(Some(newer_version)) = update::check_for_updates(&version).await {
-            let prompt = format!(
+        // Patch-update offers are an interactive-only feature: scripts must not
+        // trigger surprise downloads, so the check is skipped without a terminal.
+        if std::io::stdin().is_terminal()
+            && let Ok(Some(newer_version)) = update::check_for_updates(&version).await
+        {
+            let question = format!(
                 "{} A new patch version is available: {} ➜ {}. Do you want to install and use it now?",
                 "💡".yellow(),
                 version.dimmed(),
                 newer_version.green().bold()
             );
 
-            if Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt(&prompt)
-                .default(true)
-                .interact_opt()?
-                .unwrap_or(false)
-            {
-                let install_cmd = crate::commands::install::Install {
-                    version: Some(newer_version.clone()),
-                };
-                install_cmd.call().await?;
-                version = newer_version;
+            if prompt::confirm(&question, true, self.yes)? {
+                // Carry over the packages of the version being replaced so the
+                // upgrade does not re-ask what is already known.
+                let installed_pkgs = fs::get_installed_packages(&version);
+                if crate::commands::install::execute_install_with(
+                    &newer_version,
+                    false,
+                    &installed_pkgs,
+                    self.yes,
+                )
+                .await?
+                .is_some()
+                {
+                    version = newer_version;
+                }
             }
         }
 
@@ -156,17 +161,14 @@ impl Use {
             && let Ok(current_file_ver) = std::fs::read_to_string(PHP_VERSION_FILE)
             && current_file_ver.trim() != version
         {
-            let prompt = format!(
+            let question = format!(
                 "A {} file is present ({}). Do you want to apply this change to the directory?",
                 PHP_VERSION_FILE,
                 current_file_ver.trim().yellow()
             );
-            if Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt(&prompt)
-                .default(false)
-                .interact_opt()?
-                .unwrap_or(false)
-            {
+            // Deliberately not covered by --yes: writing .php-version is a
+            // side effect the user should opt into explicitly.
+            if prompt::confirm(&question, false, false)? {
                 std::fs::write(PHP_VERSION_FILE, &version)
                     .with_context(|| format!("Failed to update {}", PHP_VERSION_FILE))?;
                 eprintln!(

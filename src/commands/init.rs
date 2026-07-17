@@ -60,6 +60,7 @@ impl Init {
             let use_cmd = crate::commands::use_cmd::Use {
                 version: Some(selected.clone()),
                 silent: false,
+                yes: false,
             };
             use_cmd.call().await?;
         }

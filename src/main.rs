@@ -4,6 +4,7 @@ mod constants;
 mod fs;
 mod interactive;
 mod network;
+mod prompt;
 mod shell;
 mod update;
 

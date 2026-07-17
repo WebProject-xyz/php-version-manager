@@ -91,6 +91,32 @@ fn test_install_no_version_non_tty_fails() {
 }
 
 #[test]
+fn test_install_packages_flag_rejects_unavailable() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_remote_cache(temp_dir.path(), &[("8.9.7", &["cli"])]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("install").arg("8.9.7").arg("--packages").arg("fpm");
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "Package 'fpm' is not available for PHP 8.9.7",
+    ));
+}
+
+#[test]
+fn test_install_non_tty_without_cli_package_fails() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_remote_cache(temp_dir.path(), &[("8.9.7", &["fpm"])]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("install").arg("8.9.7");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Use --packages"));
+}
+
+#[test]
 fn test_help() {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
     cmd.arg("--help");

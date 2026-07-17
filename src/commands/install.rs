@@ -11,14 +11,25 @@ use std::io::IsTerminal;
 pub struct Install {
     /// The version to install, or "latest"
     pub version: Option<String>,
+
+    /// Packages to install without prompting (comma-separated: cli,fpm,micro)
+    #[arg(long, value_delimiter = ',')]
+    pub packages: Vec<String>,
+
+    /// Auto-approve prompts
+    #[arg(short = 'y', long = "yes")]
+    pub yes: bool,
 }
 
 /// `prompt_activation` controls the trailing "Do you want to use PHP X now?" prompt and the
 /// resulting env-file write. Callers like `pvm use` set it to `false` because they will fall
 /// through to their own activation path with the returned resolved version.
+/// `packages` skips the interactive package selection; `assume_yes` auto-approves prompts.
 pub async fn execute_install_with(
     version: &str,
     prompt_activation: bool,
+    packages: &[String],
+    assume_yes: bool,
 ) -> Result<Option<String>> {
     let versions_dir = fs::get_versions_dir()?;
     std::fs::create_dir_all(&versions_dir)?;
@@ -41,30 +52,11 @@ pub async fn execute_install_with(
         anyhow::bail!("No packages found for PHP {}", resolved_version);
     }
 
-    let theme = dialoguer::theme::ColorfulTheme::default();
-    let selections = dialoguer::MultiSelect::with_theme(&theme)
-        .with_prompt(format!(
-            "Select packages to install for PHP {}",
-            resolved_version
-        ))
-        .items(&available_packages)
-        .defaults(
-            &available_packages
-                .iter()
-                .map(|p| p == "cli")
-                .collect::<Vec<_>>(),
-        )
-        .interact()?;
-
-    if selections.is_empty() {
+    let selected_packages = select_packages(&resolved_version, &available_packages, packages)?;
+    let Some(selected_packages) = selected_packages else {
         println!("{} No packages selected. Operation cancelled.", "✗".red());
         return Ok(None);
-    }
-
-    let selected_packages: Vec<String> = selections
-        .into_iter()
-        .map(|i| available_packages[i].clone())
-        .collect();
+    };
 
     let dest = versions_dir.join(&resolved_version);
     let dest_existed = dest.exists();
@@ -115,16 +107,13 @@ pub async fn execute_install_with(
     }
 
     let use_now = cli_selected
-        && dialoguer::Confirm::with_theme(&theme)
-            .with_prompt(
-                format!("Do you want to use PHP {} now?", resolved_version)
-                    .bold()
-                    .to_string(),
-            )
-            .default(true)
-            .interact_opt()
-            .unwrap_or(Some(false))
-            .unwrap_or(false);
+        && crate::prompt::confirm(
+            &format!("Do you want to use PHP {} now?", resolved_version)
+                .bold()
+                .to_string(),
+            true,
+            assume_yes,
+        )?;
 
     if use_now {
         let v = crate::fs::resolve_local_version(&resolved_version)?;
@@ -157,9 +146,69 @@ pub async fn execute_install_with(
     }
 }
 
+/// Decide which packages to install: an explicit list is validated against
+/// what the remote offers; without one, a non-interactive stdin defaults to
+/// "cli" and a terminal gets the MultiSelect. Returns None on empty selection.
+fn select_packages(
+    resolved_version: &str,
+    available_packages: &[String],
+    requested: &[String],
+) -> Result<Option<Vec<String>>> {
+    if !requested.is_empty() {
+        for pkg in requested {
+            if !available_packages.contains(pkg) {
+                anyhow::bail!(
+                    "Package '{}' is not available for PHP {} (available: {})",
+                    pkg,
+                    resolved_version,
+                    available_packages.join(", ")
+                );
+            }
+        }
+        return Ok(Some(requested.to_vec()));
+    }
+
+    if !std::io::stdin().is_terminal() {
+        let default_pkg = "cli".to_string();
+        if !available_packages.contains(&default_pkg) {
+            anyhow::bail!(
+                "No terminal to select packages and the default 'cli' package is not available for PHP {} (available: {}). Use --packages.",
+                resolved_version,
+                available_packages.join(", ")
+            );
+        }
+        return Ok(Some(vec![default_pkg]));
+    }
+
+    let theme = dialoguer::theme::ColorfulTheme::default();
+    let selections = dialoguer::MultiSelect::with_theme(&theme)
+        .with_prompt(format!(
+            "Select packages to install for PHP {}",
+            resolved_version
+        ))
+        .items(available_packages)
+        .defaults(
+            &available_packages
+                .iter()
+                .map(|p| p == "cli")
+                .collect::<Vec<_>>(),
+        )
+        .interact()?;
+
+    if selections.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(
+        selections
+            .into_iter()
+            .map(|i| available_packages[i].clone())
+            .collect(),
+    ))
+}
+
 /// Interactive remote-version picker used by `pvm install` without a version:
 /// quick-select aliases (latest, newest patch per minor) above the full list.
-async fn pick_and_install() -> Result<()> {
+async fn pick_and_install(packages: &[String], assume_yes: bool) -> Result<()> {
     if !std::io::stdin().is_terminal() {
         anyhow::bail!("No version given. Usage: pvm install <version>");
     }
@@ -247,7 +296,7 @@ async fn pick_and_install() -> Result<()> {
     };
 
     if !installed.contains(selected) {
-        execute_install_with(selected, true).await?;
+        execute_install_with(selected, true, packages, assume_yes).await?;
     } else {
         println!(
             "{} PHP {} is already installed.",
@@ -262,8 +311,10 @@ async fn pick_and_install() -> Result<()> {
 impl Install {
     pub async fn call(self) -> Result<()> {
         match self.version {
-            Some(v) => execute_install_with(&v, true).await.map(|_| ()),
-            None => pick_and_install().await,
+            Some(v) => execute_install_with(&v, true, &self.packages, self.yes)
+                .await
+                .map(|_| ()),
+            None => pick_and_install(&self.packages, self.yes).await,
         }
     }
 }

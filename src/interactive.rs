@@ -37,11 +37,16 @@ pub async fn run_root_menu() -> Result<()> {
                 let cmd = commands::use_cmd::Use {
                     version: None,
                     silent: false,
+                    yes: false,
                 };
                 cmd.call().await
             }
             1 => {
-                let cmd = commands::install::Install { version: None };
+                let cmd = commands::install::Install {
+                    version: None,
+                    packages: vec![],
+                    yes: false,
+                };
                 cmd.call().await
             }
             2 => {

@@ -2,8 +2,6 @@ use crate::fs;
 use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
-use std::io::IsTerminal;
-
 use dialoguer::{Select, theme::ColorfulTheme};
 
 /// Uninstall a specific PHP version
@@ -59,19 +57,10 @@ impl Uninstall {
             );
         }
 
-        let is_tty = std::io::stdin().is_terminal();
-        if !self.yes && is_tty {
-            let prompt = format!("Are you sure you want to uninstall PHP {}?", version);
-            let confirmed = dialoguer::Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt(prompt.bold().to_string())
-                .default(true)
-                .interact_opt()?
-                .unwrap_or(false);
-
-            if !confirmed {
-                println!("{} Operation cancelled.", "✗".red());
-                return Ok(());
-            }
+        let question = format!("Are you sure you want to uninstall PHP {}?", version);
+        if !crate::prompt::confirm(&question.bold().to_string(), true, self.yes)? {
+            println!("{} Operation cancelled.", "✗".red());
+            return Ok(());
         }
 
         println!("{} Removing PHP {}...", "↻".blue(), version);
