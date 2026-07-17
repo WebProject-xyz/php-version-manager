@@ -1,5 +1,54 @@
 use predicates::prelude::*;
 
+/// Seed the remote version cache so commands that hit the network resolve
+/// entirely offline. Mirrors the cache filename scheme in network.rs.
+fn seed_remote_cache(pvm_dir: &std::path::Path, versions: &[(&str, &[&str])]) {
+    let data: Vec<(String, Vec<String>)> = versions
+        .iter()
+        .map(|(v, pkgs)| {
+            (
+                v.to_string(),
+                pkgs.iter().map(|p| p.to_string()).collect(),
+            )
+        })
+        .collect();
+    let target = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+    std::fs::create_dir_all(pvm_dir).unwrap();
+    std::fs::write(
+        pvm_dir.join(format!("remote_cache-{}.json", target)),
+        serde_json::to_string(&data).unwrap(),
+    )
+    .unwrap();
+}
+
+/// Create a fake installed version with the given package binaries.
+fn seed_installed_version(pvm_dir: &std::path::Path, version: &str, packages: &[&str]) {
+    let bin_dir = pvm_dir.join("versions").join(version).join("bin");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    for pkg in packages {
+        let file = match *pkg {
+            "cli" => "php",
+            "fpm" => "php-fpm",
+            "micro" => "micro.sfx",
+            other => panic!("unknown package {}", other),
+        };
+        std::fs::write(bin_dir.join(file), "").unwrap();
+    }
+}
+
+#[test]
+fn test_install_resolve_failure_uses_cache_offline() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_remote_cache(temp_dir.path(), &[("8.9.7", &["cli"])]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("install").arg("7.0");
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "Could not resolve a remotely available version matching '7.0'",
+    ));
+}
+
 #[test]
 fn test_help() {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
