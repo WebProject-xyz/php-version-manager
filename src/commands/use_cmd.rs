@@ -24,6 +24,15 @@ pub struct Use {
 
 impl Use {
     pub async fn call(self) -> Result<()> {
+        // "system" is not a real version: deactivate pvm for this shell instead.
+        if self.version.as_deref() == Some("system") {
+            let s = shell::detect_shell();
+            let env_file = fs::get_env_update_path()?;
+            fs::write_env_file_locked(&env_file, &s.deactivate(&fs::get_versions_dir()?))?;
+            eprintln!("{} Switched to system PHP", "✓".green());
+            return Ok(());
+        }
+
         let mut version = match self.version {
             Some(ref v) => match fs::try_resolve_local_version(v)? {
                 Some(resolved) => resolved,

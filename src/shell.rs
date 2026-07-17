@@ -6,6 +6,9 @@ pub trait Shell {
     fn set_env_var(&self, name: &str, value: &str) -> String;
     fn use_on_cd(&self) -> String;
     fn wrapper_fn(&self) -> String;
+    /// Emit commands that drop every pvm-managed entry from PATH and clear
+    /// the multishell marker, returning the shell to the system PHP.
+    fn deactivate(&self, versions_dir: &Path) -> String;
 }
 
 /// Quote a string for POSIX shells (bash/zsh) by wrapping it in single quotes
@@ -80,6 +83,13 @@ pvm() {{
     )
 }
 
+fn posix_deactivate(versions_dir: &Path) -> String {
+    format!(
+        "export PVM_MULTISHELL_PATH=''\nexport PATH=\"$(printf '%s' \"$PATH\" | tr ':' '\\n' | grep -vF {} | paste -sd : -)\"",
+        posix_single_quote(&versions_dir.display().to_string())
+    )
+}
+
 pub struct Bash;
 
 impl Shell for Bash {
@@ -110,6 +120,10 @@ fi
     fn wrapper_fn(&self) -> String {
         posix_wrapper_fn()
     }
+
+    fn deactivate(&self, versions_dir: &Path) -> String {
+        posix_deactivate(versions_dir)
+    }
 }
 
 pub struct Zsh;
@@ -139,6 +153,10 @@ add-zsh-hook chpwd _pvm_cd_hook
     fn wrapper_fn(&self) -> String {
         posix_wrapper_fn()
     }
+
+    fn deactivate(&self, versions_dir: &Path) -> String {
+        posix_deactivate(versions_dir)
+    }
 }
 
 pub struct Fish;
@@ -164,6 +182,13 @@ function _pvm_cd_hook --on-variable PWD
 end
 "
         .to_string()
+    }
+
+    fn deactivate(&self, versions_dir: &Path) -> String {
+        format!(
+            "set -gx PVM_MULTISHELL_PATH ''\nset -gx PATH (string match -v -- {} $PATH)",
+            fish_single_quote(&format!("{}*", versions_dir.display()))
+        )
     }
 
     fn wrapper_fn(&self) -> String {
@@ -266,5 +291,22 @@ mod tests {
     fn test_fish_set_env_escapes_special_chars() {
         let fish = Fish;
         assert_eq!(fish.set_env_var("X", "a'b\\c"), "set -gx X 'a\\'b\\\\c'");
+    }
+
+    #[test]
+    fn test_bash_deactivate_filters_versions_dir() {
+        let bash = Bash;
+        let out = bash.deactivate(std::path::Path::new("/data/pvm/versions"));
+        assert!(out.contains("export PVM_MULTISHELL_PATH=''"));
+        assert!(out.contains("grep -vF '/data/pvm/versions'"));
+        assert!(out.contains("paste -sd : -"));
+    }
+
+    #[test]
+    fn test_fish_deactivate_filters_versions_dir() {
+        let fish = Fish;
+        let out = fish.deactivate(std::path::Path::new("/data/pvm/versions"));
+        assert!(out.contains("set -gx PVM_MULTISHELL_PATH ''"));
+        assert!(out.contains("string match -v -- '/data/pvm/versions*' $PATH"));
     }
 }

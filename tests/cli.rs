@@ -191,6 +191,26 @@ fn test_default_rejects_missing_version() {
 }
 
 #[test]
+fn test_use_system_writes_deactivation_env_file() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let env_file = temp_dir.path().join("custom_env_update");
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env("PVM_ENV_UPDATE_PATH", &env_file);
+    cmd.env("SHELL", "/bin/bash");
+    cmd.arg("use").arg("system");
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Switched to system PHP"));
+
+    let content = std::fs::read_to_string(env_file).unwrap();
+    assert!(content.contains("export PVM_MULTISHELL_PATH=''"));
+    assert!(content.contains("grep -vF"));
+    assert!(content.contains("versions"));
+}
+
+#[test]
 fn test_help() {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
     cmd.arg("--help");
