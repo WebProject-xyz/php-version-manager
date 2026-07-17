@@ -117,6 +117,22 @@ fn test_install_non_tty_without_cli_package_fails() {
 }
 
 #[test]
+fn test_install_already_installed_is_idempotent_non_tty() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_remote_cache(temp_dir.path(), &[("8.9.7", &["cli", "fpm"])]);
+    seed_installed_version(temp_dir.path(), "8.9.7", &["cli"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("install").arg("8.9.7");
+    // Succeeds without any download attempt (the fake version would 404).
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("already installed [cli]"));
+    assert!(temp_dir.path().join("versions/8.9.7/bin/php").exists());
+}
+
+#[test]
 fn test_help() {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
     cmd.arg("--help");

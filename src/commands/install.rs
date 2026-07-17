@@ -52,7 +52,30 @@ pub async fn execute_install_with(
         anyhow::bail!("No packages found for PHP {}", resolved_version);
     }
 
-    let selected_packages = select_packages(&resolved_version, &available_packages, packages)?;
+    let already_installed = fs::get_installed_packages(&resolved_version);
+    if !already_installed.is_empty() {
+        println!(
+            "{} PHP {} is already installed [{}]",
+            "💡".yellow(),
+            resolved_version.bold(),
+            already_installed.join(", ")
+        );
+        // Idempotent no-op for scripts: nothing was explicitly requested and
+        // the default cli package is already present.
+        if packages.is_empty()
+            && !std::io::stdin().is_terminal()
+            && already_installed.iter().any(|p| p == "cli")
+        {
+            return Ok(Some(resolved_version));
+        }
+    }
+
+    let selected_packages = select_packages(
+        &resolved_version,
+        &available_packages,
+        packages,
+        &already_installed,
+    )?;
     let Some(selected_packages) = selected_packages else {
         println!("{} No packages selected. Operation cancelled.", "✗".red());
         return Ok(None);
@@ -147,12 +170,14 @@ pub async fn execute_install_with(
 }
 
 /// Decide which packages to install: an explicit list is validated against
-/// what the remote offers; without one, a non-interactive stdin defaults to
-/// "cli" and a terminal gets the MultiSelect. Returns None on empty selection.
+/// what the remote offers (and may reinstall); without one, a non-interactive
+/// stdin defaults to "cli" and a terminal gets the MultiSelect, preselecting
+/// whatever is not yet installed. Returns None on empty selection.
 fn select_packages(
     resolved_version: &str,
     available_packages: &[String],
     requested: &[String],
+    already_installed: &[String],
 ) -> Result<Option<Vec<String>>> {
     if !requested.is_empty() {
         for pkg in requested {
@@ -190,7 +215,14 @@ fn select_packages(
         .defaults(
             &available_packages
                 .iter()
-                .map(|p| p == "cli")
+                .map(|p| {
+                    if already_installed.is_empty() {
+                        p == "cli"
+                    } else {
+                        // Preselect what is missing so "add fpm later" is one Enter away.
+                        !already_installed.contains(p)
+                    }
+                })
                 .collect::<Vec<_>>(),
         )
         .interact()?;
