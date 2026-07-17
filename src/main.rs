@@ -14,8 +14,6 @@ use colored::Colorize;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::init();
-
     let _pvm_dir = fs::get_pvm_dir()?;
     let versions_dir = fs::get_versions_dir()?;
     std::fs::create_dir_all(&versions_dir)?;
