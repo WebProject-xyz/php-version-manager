@@ -289,6 +289,21 @@ fn test_use_no_version_non_tty_fails_with_hint() {
 }
 
 #[test]
+fn test_init_non_tty_fails_with_hint() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_remote_cache(temp_dir.path(), &[("8.9.7", &["cli"])]);
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.current_dir(temp_dir.path());
+    cmd.arg("init");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("requires a terminal"));
+}
+
+#[test]
 fn test_ls_empty() {
     let temp_dir = tempfile::tempdir().unwrap();
 
