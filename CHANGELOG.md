@@ -1,3 +1,9 @@
+## [2.0.1](https://github.com/WebProject-xyz/php-version-manager/compare/v2.0.0...v2.0.1) (2026-07-24)
+
+### Bug Fixes
+
+* stop PATH growing on every activation, guard the bash cd-hook, ship linux-aarch64 ([#41](https://github.com/WebProject-xyz/php-version-manager/issues/41)) ([0b7b39a](https://github.com/WebProject-xyz/php-version-manager/commit/0b7b39a25e83511e1c429f7e07f63d3619e07c09))
+
 ## [2.0.0](https://github.com/WebProject-xyz/php-version-manager/compare/v1.3.2...v2.0.0) (2026-07-24)
 
 ### ⚠ BREAKING CHANGES
