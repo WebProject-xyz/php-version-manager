@@ -191,6 +191,72 @@ fn test_default_rejects_missing_version() {
 }
 
 #[test]
+fn test_uninstall_clears_stale_default() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
+    std::fs::write(temp_dir.path().join("default"), "8.9.6").unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("uninstall").arg("8.9.6").arg("--yes");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("default cleared"));
+
+    assert!(
+        !temp_dir.path().join("default").exists(),
+        "stale default file must be removed with its version"
+    );
+}
+
+#[test]
+fn test_use_missing_version_non_tty_fails_without_yes() {
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env("PVM_UPDATE_MODE", "disabled");
+    cmd.current_dir(temp_dir.path());
+    cmd.arg("use").arg("8.9");
+    // No terminal, no --yes: must not silently download and install.
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("or pass --yes"));
+}
+
+#[test]
+fn test_env_warns_about_stale_default() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    std::fs::write(temp_dir.path().join("default"), "8.9.6").unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.arg("env").arg("--shell=bash");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("PVM_MULTISHELL_PATH").not())
+        .stderr(predicate::str::contains("is not installed"));
+}
+
+#[test]
+fn test_prune_non_tty_defaults_to_removal() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.9.1", &["cli"]);
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env_remove("PVM_MULTISHELL_PATH");
+    cmd.arg("prune");
+    // Non-TTY confirm falls back to the default (yes), like uninstall.
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Removed PHP 8.9.1"));
+    assert!(!temp_dir.path().join("versions/8.9.1").exists());
+    assert!(temp_dir.path().join("versions/8.9.6").exists());
+}
+
+#[test]
 fn test_use_system_writes_deactivation_env_file() {
     let temp_dir = tempfile::tempdir().unwrap();
     let env_file = temp_dir.path().join("custom_env_update");

@@ -73,6 +73,17 @@ impl Uninstall {
             }
         }
 
+        // Do not leave a default pointing at a removed version: 'pvm env'
+        // would silently skip it and new shells would fall back to system PHP.
+        if fs::get_default_version()?.as_deref() == Some(version.as_str()) {
+            fs::clear_default_version()?;
+            println!(
+                "{} PHP {} was the default version; default cleared. Set a new one with 'pvm default <version>'.",
+                "💡".yellow(),
+                version
+            );
+        }
+
         Ok(())
     }
 }
