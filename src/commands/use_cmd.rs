@@ -5,7 +5,6 @@ use clap::Parser;
 use colored::Colorize;
 use dialoguer::{Select, theme::ColorfulTheme};
 use std::io::IsTerminal;
-use std::path::Path;
 
 /// Change PHP version
 #[derive(Parser, Debug)]
@@ -176,6 +175,30 @@ pub(crate) fn pick_installed_version(prompt_text: &str) -> Result<Option<String>
     Ok(selection.map(|idx| items[idx].version.clone()))
 }
 
+/// The .php-version question for this activation, or None when there is
+/// nothing to ask: picker flows offer to save (or update) the choice,
+/// explicit-argument flows only offer to update an existing differing file.
+fn save_question(version: &str, file_version: &Option<String>, offer_save: bool) -> Option<String> {
+    if file_version.as_deref() == Some(version) {
+        return None;
+    }
+    match (offer_save, file_version) {
+        (true, Some(old)) => Some(format!(
+            "Save {} to {} (currently {})?",
+            version.bold(),
+            PHP_VERSION_FILE,
+            old.yellow()
+        )),
+        (true, None) => Some(format!("Save {} to {}?", version.bold(), PHP_VERSION_FILE)),
+        (false, Some(old)) => Some(format!(
+            "A {} file is present ({}). Do you want to apply this change to the directory?",
+            PHP_VERSION_FILE,
+            old.yellow()
+        )),
+        (false, None) => None,
+    }
+}
+
 /// Write the deactivation snippet for this shell session ('pvm use system',
 /// or a .php-version file containing "system").
 fn switch_to_system(quiet: bool) -> Result<()> {
@@ -251,40 +274,7 @@ pub(crate) async fn activate(mut version: String, opts: ActivateOpts) -> Result<
         .ok()
         .map(|c| c.trim().to_string());
 
-    if opts.offer_save {
-        // Picker flows: offer to persist the choice for this directory.
-        if file_version.as_deref() != Some(version.as_str()) {
-            let question = match &file_version {
-                Some(old) => format!(
-                    "Save {} to {} (currently {})?",
-                    version.bold(),
-                    PHP_VERSION_FILE,
-                    old.yellow()
-                ),
-                None => format!("Save {} to {}?", version.bold(), PHP_VERSION_FILE),
-            };
-            // Deliberately not covered by --yes: writing .php-version is a
-            // side effect the user should opt into explicitly.
-            if prompt::confirm(&question, false, false)? {
-                std::fs::write(PHP_VERSION_FILE, &version)
-                    .with_context(|| format!("Failed to update {}", PHP_VERSION_FILE))?;
-                eprintln!(
-                    "{} Updated {} to {}",
-                    "✓".green(),
-                    PHP_VERSION_FILE,
-                    version.bold()
-                );
-            }
-        }
-    } else if Path::new(PHP_VERSION_FILE).exists()
-        && let Some(ref current_file_ver) = file_version
-        && current_file_ver != &version
-    {
-        let question = format!(
-            "A {} file is present ({}). Do you want to apply this change to the directory?",
-            PHP_VERSION_FILE,
-            current_file_ver.yellow()
-        );
+    if let Some(question) = save_question(&version, &file_version, opts.offer_save) {
         // Deliberately not covered by --yes: writing .php-version is a
         // side effect the user should opt into explicitly.
         if prompt::confirm(&question, false, false)? {
