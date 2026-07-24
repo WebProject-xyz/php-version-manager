@@ -30,6 +30,16 @@ impl Exec {
             .status()
             .with_context(|| format!("Failed to execute '{}'", self.command[0]))?;
 
-        std::process::exit(status.code().unwrap_or(1));
+        #[cfg(unix)]
+        let code = {
+            use std::os::unix::process::ExitStatusExt;
+            // Mirror the shell convention for signal-terminated children.
+            status
+                .code()
+                .unwrap_or_else(|| 128 + status.signal().unwrap_or(1))
+        };
+        #[cfg(not(unix))]
+        let code = status.code().unwrap_or(1);
+        std::process::exit(code);
     }
 }
