@@ -268,9 +268,7 @@ async fn pick_and_install(packages: &[String], assume_yes: bool) -> Result<()> {
 
     for (v, _) in &versions_info {
         highest_overall = Some(v.clone());
-        let parts: Vec<&str> = v.split('.').collect();
-        if parts.len() >= 2 {
-            let minor = format!("{}.{}", parts[0], parts[1]);
+        if let Some(minor) = fs::minor_of(v) {
             minors.insert(minor, v.clone()); // BTreeMap iterates ascending, keeps latest
         }
     }

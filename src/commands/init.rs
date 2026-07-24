@@ -43,7 +43,7 @@ impl Init {
         let mut displays = Vec::new(); // what the picker shows
 
         for v in fs::list_installed_versions()?.iter().rev() {
-            if let Some(mm) = major_minor(v)
+            if let Some(mm) = fs::minor_of(v)
                 && seen.insert(mm.clone())
             {
                 displays.push(format!("{} {}", mm, "(installed)".green()));
@@ -56,7 +56,7 @@ impl Init {
             Ok(remote) => {
                 for (v, _) in remote.iter().rev() {
                     // Start from newest
-                    if let Some(mm) = major_minor(v)
+                    if let Some(mm) = fs::minor_of(v)
                         && seen.insert(mm.clone())
                     {
                         displays.push(mm.clone());
@@ -111,14 +111,5 @@ impl Init {
         }
 
         Ok(())
-    }
-}
-
-/// "8.4.18" -> "8.4"; None when there is no minor component.
-fn major_minor(v: &str) -> Option<String> {
-    let mut parts = v.split('.');
-    match (parts.next(), parts.next()) {
-        (Some(major), Some(minor)) => Some(format!("{}.{}", major, minor)),
-        _ => None,
     }
 }

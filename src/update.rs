@@ -49,11 +49,9 @@ pub async fn check_for_updates(target_version: &str) -> Result<Option<String>> {
     }
 
     // Parse out the minor version (e.g., "8.4.1" -> "8.4")
-    let parts: Vec<&str> = target_version.split('.').collect();
-    if parts.len() < 2 {
+    let Some(minor_prefix) = fs::minor_of(target_version) else {
         return Ok(None);
-    }
-    let minor_prefix = format!("{}.{}", parts[0], parts[1]);
+    };
 
     // Fetch remotes and resolve the newest patch for that minor line.
     // Resolution failures are ignored: the update check is best-effort.

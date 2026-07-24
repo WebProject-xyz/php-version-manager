@@ -38,6 +38,12 @@ pub fn get_versions_dir() -> Result<PathBuf> {
     Ok(get_pvm_dir()?.join("versions"))
 }
 
+/// "8.3.1" -> "8.3"; None for names without a major.minor prefix.
+pub fn minor_of(version: &str) -> Option<String> {
+    let mut parts = version.split('.');
+    Some(format!("{}.{}", parts.next()?, parts.next()?))
+}
+
 pub fn get_version_bin_dir(version: &str) -> Result<PathBuf> {
     Ok(get_versions_dir()?.join(version).join("bin"))
 }
@@ -155,9 +161,7 @@ pub fn get_aliased_versions() -> Result<Vec<VersionItem>> {
     // Minor version aliases
     let mut minors = std::collections::BTreeMap::new();
     for v in &installed {
-        let parts: Vec<&str> = v.split('.').collect();
-        if parts.len() >= 2 {
-            let minor = format!("{}.{}", parts[0], parts[1]);
+        if let Some(minor) = minor_of(v) {
             // BTreeMap keeps the latest because we iterate in ascending order, overriding previous values
             minors.insert(minor, v.clone());
         }

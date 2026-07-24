@@ -21,7 +21,7 @@ impl Prune {
         // is semver-sorted ascending, so the last insert per minor wins.
         let mut keepers: BTreeMap<String, String> = BTreeMap::new();
         for version in &installed {
-            if let Some(minor) = minor_of(version) {
+            if let Some(minor) = fs::minor_of(version) {
                 keepers.insert(minor, version.clone());
             }
         }
@@ -31,7 +31,7 @@ impl Prune {
         let candidates: Vec<(String, String)> = installed
             .iter()
             .filter_map(|version| {
-                let keeper = keepers.get(&minor_of(version)?)?;
+                let keeper = keepers.get(&fs::minor_of(version)?)?;
                 (version != keeper && *version != current)
                     .then(|| (version.clone(), keeper.clone()))
             })
@@ -77,12 +77,4 @@ impl Prune {
 
         Ok(())
     }
-}
-
-/// "8.3.1" -> "8.3"; None for names without a major.minor prefix.
-fn minor_of(version: &str) -> Option<String> {
-    let mut parts = version.split('.');
-    let major = parts.next()?;
-    let minor = parts.next()?;
-    Some(format!("{}.{}", major, minor))
 }
