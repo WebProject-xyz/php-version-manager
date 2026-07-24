@@ -331,7 +331,9 @@ async fn pick_and_install(packages: &[String], assume_yes: bool) -> Result<()> {
         }
     };
 
-    if !installed.contains(selected) {
+    // Explicit --packages must not be swallowed by the short-circuit: it is
+    // the way to add packages to an already-installed version.
+    if !installed.contains(selected) || !packages.is_empty() {
         execute_install_with(selected, true, packages, assume_yes).await?;
     } else {
         println!(

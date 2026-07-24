@@ -3,6 +3,7 @@ use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
 use std::collections::BTreeMap;
+use std::io::IsTerminal;
 
 /// Remove superseded patch versions
 #[derive(Parser, Debug)]
@@ -45,6 +46,15 @@ impl Prune {
         println!("The following superseded version(s) will be removed:");
         for (version, keeper) in &candidates {
             println!("  {} (superseded by {})", version, keeper.bold());
+        }
+
+        // Mass deletion needs explicit consent in scripts, like the other
+        // non-TTY guards in this codebase (use/install).
+        if !std::io::stdin().is_terminal() && !self.yes {
+            anyhow::bail!(
+                "Refusing to prune {} version(s) without a terminal; pass --yes to confirm.",
+                candidates.len()
+            );
         }
 
         let question = format!("Remove {} superseded version(s)?", candidates.len());

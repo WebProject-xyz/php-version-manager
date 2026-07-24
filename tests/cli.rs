@@ -239,16 +239,26 @@ fn test_env_warns_about_stale_default() {
 }
 
 #[test]
-fn test_prune_non_tty_defaults_to_removal() {
+fn test_prune_non_tty_requires_yes() {
     let temp_dir = tempfile::tempdir().unwrap();
     seed_installed_version(temp_dir.path(), "8.9.1", &["cli"]);
     seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
 
+    // Without a terminal and without -y, mass deletion must refuse.
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
     cmd.env("PVM_DIR", temp_dir.path());
     cmd.env_remove("PVM_MULTISHELL_PATH");
     cmd.arg("prune");
-    // Non-TTY confirm falls back to the default (yes), like uninstall.
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("pass --yes"));
+    assert!(temp_dir.path().join("versions/8.9.1").exists());
+
+    // With -y it removes the superseded patch and keeps the keeper.
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env_remove("PVM_MULTISHELL_PATH");
+    cmd.arg("prune").arg("-y");
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("Removed PHP 8.9.1"));

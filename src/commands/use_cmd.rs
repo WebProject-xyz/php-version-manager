@@ -274,7 +274,11 @@ pub(crate) async fn activate(mut version: String, opts: ActivateOpts) -> Result<
         .ok()
         .map(|c| c.trim().to_string());
 
-    if let Some(question) = save_question(&version, &file_version, opts.offer_save) {
+    // quiet = shell cd-hook: never prompt there, or a .php-version holding a
+    // partial version like "8.3" would ask on every single cd.
+    if !opts.quiet
+        && let Some(question) = save_question(&version, &file_version, opts.offer_save)
+    {
         // Deliberately not covered by --yes: writing .php-version is a
         // side effect the user should opt into explicitly.
         if prompt::confirm(&question, false, false)? {
