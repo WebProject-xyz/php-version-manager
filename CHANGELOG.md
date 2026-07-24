@@ -1,3 +1,185 @@
+## [2.0.0](https://github.com/WebProject-xyz/php-version-manager/compare/v1.3.2...v2.0.0) (2026-07-24)
+
+### ⚠ BREAKING CHANGES
+
+* 'pvm ls-remote' no longer prompts to install a
+selected version. Use 'pvm install' without arguments for the
+interactive picker.
+
+* feat(install): non-interactive installs via --packages, -y and non-TTY defaults
+
+- pvm install gains --packages cli,fpm,micro (validated against the
+  remote index) and -y/--yes; without a terminal the package selection
+  defaults to cli instead of failing in dialoguer.
+- pvm use gains -y/--yes for the install-missing and patch-update
+  prompts; patch-update offers are now skipped entirely without a
+  terminal so scripts never trigger surprise downloads.
+- Patch updates reuse the package set of the version being replaced
+  instead of re-prompting.
+- New prompt::confirm helper centralizes Confirm handling (assume-yes,
+  non-TTY returns the default); uninstall now uses it too.
+
+* feat(install): detect installed packages and preselect missing ones
+
+Installing an already-present version now prints what is installed,
+preselects only the missing packages in the interactive selection,
+and becomes an idempotent no-op for non-interactive callers when cli
+is already there. Explicit --packages still reinstalls (repair).
+
+* feat(default): persistent default version for new shells
+
+pvm default <version> stores the version in PVM_DIR/default; pvm env
+activates it on shell startup, so a chosen version finally survives
+opening a new terminal. pvm default without argument shows an
+interactive picker (or prints the current default when non-TTY), and
+pvm default system clears it. Also added to the interactive menu.
+
+* feat(use): support switching back to system PHP
+
+pvm use system writes a deactivation snippet to the env-update file:
+it clears PVM_MULTISHELL_PATH and filters every PVM_DIR/versions
+entry out of PATH (tr/grep/paste for bash and zsh, string match for
+fish). Until now there was no way back to the system PHP without
+opening a new shell.
+
+* feat(ls): interactive version switch from list with .php-version save offer
+
+pvm ls on a terminal now shows the installed versions as a picker:
+Enter switches the shell to the selection, Esc just exits. After a
+picker-driven switch (ls or pvm use without arguments) pvm offers to
+save the choice to .php-version. Scripts and pipes still get the
+plain list. The activation tail of pvm use moved into a shared
+activate() used by both flows, and a missing version without a
+terminal now fails with a usage hint instead of a dialoguer error.
+
+* feat(init): confirm .php-version overwrite and prefer installed versions
+
+pvm init no longer overwrites an existing .php-version silently: it
+shows the current content and asks first. The selection list now
+offers locally installed versions (marked) before the remote
+major.minor lines, and falls back to installed-only with a warning
+when the remote index is unreachable. Without a terminal init fails
+with a hint instead of a dialoguer error.
+
+* feat(cache): add cache clear command for the remote version index
+
+pvm cache clear deletes the cached remote_cache-<target>.json files
+so a freshly published upstream patch becomes visible before the 24h
+cache expiry, without hand-deleting files in PVM_DIR.
+
+* feat(which): print the path of the active or given PHP binary
+
+pvm which resolves the active version (or an explicit argument like
+8.3) and prints the full path of its php binary - a debugging aid for
+"which php am I actually running".
+
+* feat(exec): run a command under a specific PHP version
+
+pvm exec <version> <cmd...> prepends the version bin directory to
+PATH for a single child process and propagates its exit code -
+testing across versions without switching the shell.
+
+* feat(prune): remove superseded patch versions
+
+pvm prune [-y] deletes every installed patch that is no longer the
+newest of its minor line, keeping the currently active version. If
+the persisted default version gets pruned, it is re-pointed to the
+kept patch of the same minor.
+
+* test(e2e): cover default, use system, non-interactive install and prune
+
+New cases 15-18 exercise pvm default persistence + env activation,
+pvm use system PATH stripping, install --packages/-y idempotency and
+prune with default re-pointing. The uninstall case moves to slot 19
+and removes LATEST, since prune already dropped PREVIOUS. Cases guard
+the single-upstream-patch situation where LATEST == PREVIOUS.
+
+* docs(readme): document new commands and flows
+
+Covers default/use system, which/exec/prune/cache clear, the
+non-interactive install flags, the interactive ls picker and plain
+output when piped, and replaces the stale fs4 reference with OS file
+locks.
+
+* docs(claude): track CLAUDE.md with current architecture
+
+Previously untracked. Documents command-dispatch conventions incl.
+the non-interactive requirements (prompt::confirm, IsTerminal
+guards), the default-version and cache files in PVM_DIR, the shared
+activate() tail, Shell::deactivate, and the offline test helpers.
+
+* fix(default): keep default lifecycle consistent on uninstall
+
+Uninstalling the persisted default version now clears the default
+file with a hint (prune already re-points it); pvm env warns on
+stderr when the stored default is not installed instead of silently
+falling back to system PHP. Tests cover both paths plus the
+non-TTY prune default.
+
+* fix(use): no surprise installs without a terminal
+
+Non-TTY 'pvm use <missing>' without --yes now fails with a hint
+instead of auto-confirming a network install (both the argument and
+.php-version paths), matching the existing patch-update gate. A
+.php-version containing 'system' deactivates instead of offering to
+install 'PHP system', --silent suppresses the deactivation message
+for cd-hooks, and Esc in the version picker exits quietly as the ls
+prompt promises.
+
+* fix(install): make -y fully non-interactive and honest without a TTY
+
+-y now also skips the package MultiSelect (defaults to cli, like a
+missing terminal); without a terminal and without -y the trailing
+'use now?' question no longer auto-answers yes, which printed a
+'Switched to PHP' message although no shell evaluates the env file.
+
+* fix(exec): propagate signal terminations as 128 plus signal number
+
+Signal-killed children previously collapsed to exit code 1; now they
+follow the shell convention so callers can distinguish SIGTERM from
+a plain failure.
+
+* refactor(use): deduplicate the .php-version save blocks in activate
+
+Both the picker and explicit-argument flows carried the same
+confirm-write-report block; save_question() now picks the wording
+and one shared block does the writing.
+
+* refactor(fs): consolidate minor-version extraction into fs::minor_of
+
+init.rs and prune.rs carried identical private helpers; fs.rs,
+update.rs and the install picker had three more inline split
+variants of the same logic.
+
+* refactor(fs): drop dead .exe checks in get_installed_packages
+
+Windows is an unsupported target (get_target_triple bails before any
+install), so the .exe fallbacks could never match.
+
+* refactor(interactive): construct and call commands inline in menu arms
+
+Every arm bound the command to a temporary before calling it; call
+directly on the struct literal instead.
+
+* chore(gitignore): ignore local .claude directory
+
+Claude Code drops runtime files (locks, worktrees) there; they are
+machine-local and must not land in commits.
+
+* fix(review): address CodeRabbit findings on prune, install picker and cd-hook
+
+- pvm prune without a terminal now requires --yes before mass
+  deletion, matching the non-TTY guards on use and install.
+- Explicit --packages survives the already-installed short-circuit in
+  the install picker, so packages can be added to an existing version.
+- The silent cd-hook never evaluates the .php-version save prompt; a
+  file holding a partial version like 8.3 would otherwise prompt on
+  every cd.
+
+### Features
+
+* command-flow overhaul, persistent default, non-interactive installs + de-bloat ([#40](https://github.com/WebProject-xyz/php-version-manager/issues/40)) ([46ca57d](https://github.com/WebProject-xyz/php-version-manager/commit/46ca57dbb8a478d56a278b199cbf1fc25594500c))
+
 ## [1.3.2](https://github.com/WebProject-xyz/php-version-manager/compare/v1.3.1...v1.3.2) (2026-06-12)
 
 ### Bug Fixes
