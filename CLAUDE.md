@@ -52,7 +52,9 @@ The hard part: a child process cannot mutate its parent shell's environment. PVM
 3. The Rust binary writes `export PATH=...; export PVM_MULTISHELL_PATH=...` to that tmpfile (with an exclusive file lock — see `fs::write_env_file_locked`).
 4. The wrapper `eval`s the tmpfile and removes it.
 
-The `Shell` trait (`Bash`, `Zsh`, `Fish`) emits the syntax for each shell; `detect_shell()` reads `$SHELL`. Bash and Zsh share the `posix_*` free functions; only `use_on_cd` differs. The `cd` hook reads `.php-version` and calls `pvm use --silent` automatically. `deactivate()` (used by `pvm use system`) writes an env-file snippet that clears `PVM_MULTISHELL_PATH` and filters `$PVM_DIR/versions` entries out of PATH.
+The `Shell` trait (`Bash`, `Zsh`, `Fish`) emits the syntax for each shell; `detect_shell()` reads `$SHELL`. Bash and Zsh share the `posix_*` free functions; only `use_on_cd` differs. The `cd` hook reads `.php-version` and calls `pvm use --silent` automatically. `deactivate()` (used by `pvm use system`) writes an env-file snippet that clears `PVM_MULTISHELL_PATH` and restores the filtered PATH.
+
+PATH is never manipulated in shell code: `Shell::path` and `Shell::deactivate` take an already-filtered entry list from `fs::path_without_versions()` and bake the whole value in literally. Because the wrapper runs `pvm` as a direct child, the Rust process sees exactly the PATH its output will be eval'd into, so it can drop stale `$PVM_DIR/versions` entries itself. Emitting `PATH=<new>:$PATH` instead would stack a duplicate on every activation — and the bash `cd` hook runs from `PROMPT_COMMAND`, i.e. after *every* command, so that grows without bound (hence the `__pvm_last_pwd` guard in `Bash::use_on_cd` and the `case`/`contains` guard around the `$PVM_DIR/bin` prepend in `wrapper_fn`).
 
 The activation tail (patch-update offer, `.php-version` prompts, env-file write) lives in `use_cmd::activate(version, ActivateOpts)`; both `pvm use` and the interactive `pvm ls` picker call it. `ActivateOpts.offer_save` distinguishes picker flows (offer to write `.php-version`) from explicit-argument flows (offer to update an existing differing file).
 

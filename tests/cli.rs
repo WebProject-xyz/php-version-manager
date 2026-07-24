@@ -1,5 +1,10 @@
 use predicates::prelude::*;
 
+/// The non-pvm part of a fabricated PATH. Deliberately synthetic so PATH
+/// assertions never depend on how the host or CI runner is laid out; pvm itself
+/// never resolves a binary through PATH, so these need not exist.
+const OTHER_PATH: &str = "/opt/tool-a/bin:/opt/tool-b/bin";
+
 /// Seed the remote version cache so commands that hit the network resolve
 /// entirely offline. Mirrors the cache filename scheme in network.rs.
 fn seed_remote_cache(pvm_dir: &std::path::Path, versions: &[(&str, &[&str])]) {
@@ -270,11 +275,13 @@ fn test_prune_non_tty_requires_yes() {
 fn test_use_system_writes_deactivation_env_file() {
     let temp_dir = tempfile::tempdir().unwrap();
     let env_file = temp_dir.path().join("custom_env_update");
+    let active_bin = temp_dir.path().join("versions/8.9.6/bin");
 
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
     cmd.env("PVM_DIR", temp_dir.path());
     cmd.env("PVM_ENV_UPDATE_PATH", &env_file);
     cmd.env("SHELL", "/bin/bash");
+    cmd.env("PATH", format!("{}:{}", active_bin.display(), OTHER_PATH));
     cmd.arg("use").arg("system");
     cmd.assert()
         .success()
@@ -282,8 +289,62 @@ fn test_use_system_writes_deactivation_env_file() {
 
     let content = std::fs::read_to_string(env_file).unwrap();
     assert!(content.contains("export PVM_MULTISHELL_PATH=''"));
-    assert!(content.contains("grep -vF"));
-    assert!(content.contains("versions"));
+    assert!(
+        content.contains(&format!("export PATH='{}'", OTHER_PATH)),
+        "{}",
+        content
+    );
+    assert!(!content.contains("versions"), "{}", content);
+}
+
+/// Regression: every activation used to prepend its bin dir to the live $PATH,
+/// so the cd-hook stacked a fresh duplicate on every switch (in bash: on every
+/// prompt) until PATH was hundreds of entries long.
+#[test]
+fn test_use_does_not_stack_duplicate_path_entries() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    seed_installed_version(temp_dir.path(), "8.9.6", &["cli"]);
+    seed_installed_version(temp_dir.path(), "8.8.1", &["cli"]);
+    let bin_896 = temp_dir.path().join("versions/8.9.6/bin");
+    let bin_881 = temp_dir.path().join("versions/8.8.1/bin");
+    let env_file = temp_dir.path().join("custom_env_update");
+
+    // Simulate a shell that already has 8.9.6 active twice over plus a stale
+    // 8.8.1 entry, i.e. the state the old code kept growing.
+    let dirty_path = format!(
+        "{}:{}:{}:{}",
+        bin_896.display(),
+        bin_896.display(),
+        bin_881.display(),
+        OTHER_PATH
+    );
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("pvm");
+    cmd.env("PVM_DIR", temp_dir.path());
+    cmd.env("PVM_ENV_UPDATE_PATH", &env_file);
+    cmd.env("SHELL", "/bin/bash");
+    cmd.env("PATH", &dirty_path);
+    cmd.env_remove("PVM_MULTISHELL_PATH");
+    cmd.arg("use").arg("--silent").arg("8.9.6");
+    cmd.assert().success();
+
+    let content = std::fs::read_to_string(&env_file).unwrap();
+    let path_line = content
+        .lines()
+        .find(|l| l.starts_with("export PATH="))
+        .expect("no PATH line");
+    assert_eq!(
+        path_line.matches(&*bin_896.to_string_lossy()).count(),
+        1,
+        "active version listed more than once: {}",
+        path_line
+    );
+    assert!(
+        !path_line.contains(&*bin_881.to_string_lossy()),
+        "stale version survived: {}",
+        path_line
+    );
+    assert!(path_line.contains(OTHER_PATH), "{}", path_line);
 }
 
 #[test]
