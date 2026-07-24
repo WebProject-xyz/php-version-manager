@@ -87,13 +87,8 @@ pub fn get_current_version() -> String {
     "system".to_string()
 }
 
-/// The inherited PATH with every `$PVM_DIR/versions` entry dropped, as a list
-/// of plain strings.
-///
-/// The wrapper runs `pvm` as a direct child of the shell, so this process sees
-/// exactly the PATH the emitted snippet will be eval'd into. Filtering here —
-/// instead of prepending in the shell — is what keeps repeated activations
-/// (every `cd` into a `.php-version` directory) from stacking duplicates.
+/// The inherited PATH with every `$PVM_DIR/versions` entry dropped — the base
+/// an activation prepends to, so repeated switches cannot stack duplicates.
 pub fn path_without_versions() -> Result<Vec<String>> {
     let versions_dir = get_versions_dir()?;
     let path = std::env::var_os("PATH").unwrap_or_default();

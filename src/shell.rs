@@ -2,12 +2,8 @@ use crate::constants::{ENV_UPDATE_FILE, PVM_DIR_VAR};
 use std::path::Path;
 
 pub trait Shell {
-    /// Emit a PATH assignment putting `bin_dir` in front of `rest`.
-    ///
-    /// `rest` is the caller's already-filtered PATH (see
-    /// `fs::path_without_versions`), not `$PATH`: the full value is baked in
-    /// literally so an activation replaces the previous pvm entry instead of
-    /// stacking a duplicate on top of it.
+    /// Emit a PATH assignment of `bin_dir` followed by `rest`, an already
+    /// pvm-free entry list from `fs::path_without_versions` (never `$PATH`).
     fn path(&self, bin_dir: &Path, rest: &[String]) -> String;
     fn set_env_var(&self, name: &str, value: &str) -> String;
     fn use_on_cd(&self) -> String;
@@ -48,21 +44,28 @@ fn fish_single_quote(value: &str) -> String {
     out
 }
 
-fn posix_path(bin_dir: &Path, rest: &[String]) -> String {
-    format!(
-        "export PATH={}",
-        posix_single_quote(&join_path(bin_dir, rest))
-    )
+/// `head` (if any) followed by `rest`, empty entries dropped: a stray `::` or a
+/// trailing `:` in the inherited PATH means "current directory" to the shell.
+fn path_entries<'a>(head: Option<&'a str>, rest: &'a [String]) -> impl Iterator<Item = &'a str> {
+    head.into_iter()
+        .chain(rest.iter().map(String::as_str))
+        .filter(|p| !p.is_empty())
 }
 
-/// Join `bin_dir` and `rest` into a `:`-separated PATH value. Empty entries are
-/// dropped: a stray `::` or trailing `:` means "current directory" to the shell.
-fn join_path(bin_dir: &Path, rest: &[String]) -> String {
-    std::iter::once(bin_dir.display().to_string())
-        .chain(rest.iter().cloned())
-        .filter(|p| !p.is_empty())
-        .collect::<Vec<_>>()
-        .join(":")
+fn posix_path_assignment<'a>(entries: impl Iterator<Item = &'a str>) -> String {
+    let joined = entries.collect::<Vec<_>>().join(":");
+    format!("export PATH={}", posix_single_quote(&joined))
+}
+
+/// Quote each entry separately: PATH is a list in fish, not a `:`-joined string.
+fn fish_path_assignment<'a>(entries: impl Iterator<Item = &'a str>) -> String {
+    let words: Vec<String> = entries.map(fish_single_quote).collect();
+    format!("set -gx PATH {}", words.join(" "))
+}
+
+fn posix_path(bin_dir: &Path, rest: &[String]) -> String {
+    let bin = bin_dir.to_string_lossy();
+    posix_path_assignment(path_entries(Some(bin.as_ref()), rest))
 }
 
 fn posix_set_env_var(name: &str, value: &str) -> String {
@@ -105,8 +108,8 @@ pvm() {{
 
 fn posix_deactivate(rest: &[String]) -> String {
     format!(
-        "export PVM_MULTISHELL_PATH=''\nexport PATH={}",
-        posix_single_quote(&rest.join(":"))
+        "export PVM_MULTISHELL_PATH=''\n{}",
+        posix_path_assignment(path_entries(None, rest))
     )
 }
 
@@ -186,23 +189,10 @@ add-zsh-hook chpwd _pvm_cd_hook
 
 pub struct Fish;
 
-/// Quote each entry separately: PATH is a list in fish, not a `:`-joined string.
-fn fish_path_words(entries: impl Iterator<Item = String>) -> String {
-    entries
-        .filter(|p| !p.is_empty())
-        .map(|p| fish_single_quote(&p))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 impl Shell for Fish {
     fn path(&self, bin_dir: &Path, rest: &[String]) -> String {
-        format!(
-            "set -gx PATH {}",
-            fish_path_words(
-                std::iter::once(bin_dir.display().to_string()).chain(rest.iter().cloned())
-            )
-        )
+        let bin = bin_dir.to_string_lossy();
+        fish_path_assignment(path_entries(Some(bin.as_ref()), rest))
     }
 
     fn set_env_var(&self, name: &str, value: &str) -> String {
@@ -222,8 +212,8 @@ end
 
     fn deactivate(&self, rest: &[String]) -> String {
         format!(
-            "set -gx PVM_MULTISHELL_PATH ''\nset -gx PATH {}",
-            fish_path_words(rest.iter().cloned())
+            "set -gx PVM_MULTISHELL_PATH ''\n{}",
+            fish_path_assignment(path_entries(None, rest))
         )
     }
 
@@ -278,8 +268,10 @@ pub fn detect_shell() -> Box<dyn Shell> {
 mod tests {
     use super::*;
 
+    /// Stand-in for the non-pvm part of PATH. Deliberately synthetic: nothing
+    /// here may depend on how the host or CI runner lays out its directories.
     fn rest() -> Vec<String> {
-        vec!["/usr/bin".to_string(), "/bin".to_string()]
+        vec!["/opt/tool-a/bin".to_string(), "/opt/tool-b/bin".to_string()]
     }
 
     #[test]
@@ -288,7 +280,7 @@ mod tests {
         let path = std::path::Path::new("/home/user/.local/share/pvm/versions/8.3.1/bin");
         assert_eq!(
             bash.path(path, &rest()),
-            "export PATH='/home/user/.local/share/pvm/versions/8.3.1/bin:/usr/bin:/bin'"
+            "export PATH='/home/user/.local/share/pvm/versions/8.3.1/bin:/opt/tool-a/bin:/opt/tool-b/bin'"
         );
     }
 
@@ -299,9 +291,24 @@ mod tests {
         let bash = Bash;
         let out = bash.path(
             std::path::Path::new("/pvm/versions/8.3.1/bin"),
-            &["".to_string(), "/usr/bin".to_string(), "".to_string()],
+            &[
+                "".to_string(),
+                "/opt/tool-a/bin".to_string(),
+                "".to_string(),
+            ],
         );
-        assert_eq!(out, "export PATH='/pvm/versions/8.3.1/bin:/usr/bin'");
+        assert_eq!(out, "export PATH='/pvm/versions/8.3.1/bin:/opt/tool-a/bin'");
+    }
+
+    #[test]
+    fn test_deactivate_drops_empty_entries() {
+        // Same guarantee on the way out: 'pvm use system' must not hand back a
+        // PATH whose empty entry silently means the current directory.
+        let out = Bash.deactivate(&["/opt/tool-a/bin".to_string(), "".to_string()]);
+        assert_eq!(
+            out,
+            "export PVM_MULTISHELL_PATH=''\nexport PATH='/opt/tool-a/bin'"
+        );
     }
 
     #[test]
@@ -337,7 +344,7 @@ mod tests {
         let path = std::path::Path::new("/home/user/.local/share/pvm/versions/8.3.1/bin");
         assert_eq!(
             zsh.path(path, &rest()),
-            "export PATH='/home/user/.local/share/pvm/versions/8.3.1/bin:/usr/bin:/bin'"
+            "export PATH='/home/user/.local/share/pvm/versions/8.3.1/bin:/opt/tool-a/bin:/opt/tool-b/bin'"
         );
     }
 
@@ -347,7 +354,7 @@ mod tests {
         let path = std::path::Path::new("/home/user/.local/share/pvm/versions/8.3.1/bin");
         assert_eq!(
             fish.path(path, &rest()),
-            "set -gx PATH '/home/user/.local/share/pvm/versions/8.3.1/bin' '/usr/bin' '/bin'"
+            "set -gx PATH '/home/user/.local/share/pvm/versions/8.3.1/bin' '/opt/tool-a/bin' '/opt/tool-b/bin'"
         );
     }
 
@@ -363,7 +370,7 @@ mod tests {
         let out = bash.deactivate(&rest());
         assert_eq!(
             out,
-            "export PVM_MULTISHELL_PATH=''\nexport PATH='/usr/bin:/bin'"
+            "export PVM_MULTISHELL_PATH=''\nexport PATH='/opt/tool-a/bin:/opt/tool-b/bin'"
         );
     }
 
@@ -373,23 +380,46 @@ mod tests {
         let out = fish.deactivate(&rest());
         assert_eq!(
             out,
-            "set -gx PVM_MULTISHELL_PATH ''\nset -gx PATH '/usr/bin' '/bin'"
+            "set -gx PVM_MULTISHELL_PATH ''\nset -gx PATH '/opt/tool-a/bin' '/opt/tool-b/bin'"
         );
+    }
+
+    /// Index of `needle`, or a failure naming the snippet that lacked it.
+    fn offset_of(haystack: &str, needle: &str) -> usize {
+        haystack
+            .find(needle)
+            .unwrap_or_else(|| panic!("{:?} missing from:\n{}", needle, haystack))
     }
 
     #[test]
     fn test_bash_cd_hook_skips_unchanged_pwd() {
-        // PROMPT_COMMAND fires after every command; without this guard each
-        // prompt in a .php-version directory would fork a pvm process.
-        let out = Bash.use_on_cd();
-        assert!(out.contains("[[ \"$PWD\" == \"${__pvm_last_pwd-}\" ]] && return"));
+        // PROMPT_COMMAND fires after every command, not just after a cd, so the
+        // hook has to compare $PWD and bail before it ever reads .php-version —
+        // otherwise every prompt forks a pvm process.
+        let hook = Bash.use_on_cd();
+        assert!(
+            offset_of(&hook, "__pvm_last_pwd") < offset_of(&hook, ".php-version"),
+            "cd hook reads .php-version before the $PWD guard:\n{}",
+            hook
+        );
     }
 
     #[test]
     fn test_wrapper_fn_guards_against_duplicate_bin_entry() {
         // Re-sourcing the rc file (nested shells, `exec bash`) must not stack
-        // another $PVM_DIR/bin entry onto PATH.
-        assert!(Bash.wrapper_fn().contains("case \":$PATH:\" in"));
-        assert!(Fish.wrapper_fn().contains("if not contains"));
+        // another $PVM_DIR/bin entry onto PATH, so the prepend has to sit behind
+        // a membership test rather than run unconditionally.
+        let bash = Bash.wrapper_fn();
+        assert!(
+            offset_of(&bash, "case \":$PATH:\"") < offset_of(&bash, "/bin:$PATH"),
+            "bash prepends $PVM_DIR/bin unguarded:\n{}",
+            bash
+        );
+        let fish = Fish.wrapper_fn();
+        assert!(
+            offset_of(&fish, "if not contains") < offset_of(&fish, "set -gx PATH"),
+            "fish prepends $PVM_DIR/bin unguarded:\n{}",
+            fish
+        );
     }
 }

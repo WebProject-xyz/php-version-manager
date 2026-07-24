@@ -30,10 +30,8 @@ impl Env {
         println!("{}", s.set_env_var(PVM_DIR_VAR, &pvm_dir.to_string_lossy()));
 
         // Activate the persisted default version ('pvm default') so every new
-        // shell starts on it instead of the system PHP. This has to precede
-        // wrapper_fn: the PATH it emits is a literal snapshot of this process's
-        // PATH, which cannot contain the $PVM_DIR/bin entry the wrapper adds
-        // one line later.
+        // shell starts on it instead of the system PHP. Must precede wrapper_fn:
+        // its PATH is a snapshot taken before the wrapper adds $PVM_DIR/bin.
         if let Some(version) = crate::fs::get_default_version()? {
             if crate::fs::is_version_installed(&version)? {
                 let bin_dir = crate::fs::get_version_bin_dir(&version)?;
