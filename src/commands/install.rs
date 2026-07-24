@@ -75,6 +75,7 @@ pub async fn execute_install_with(
         &available_packages,
         packages,
         &already_installed,
+        assume_yes,
     )?;
     let Some(selected_packages) = selected_packages else {
         println!("{} No packages selected. Operation cancelled.", "✗".red());
@@ -129,7 +130,10 @@ pub async fn execute_install_with(
         return Ok(Some(resolved_version));
     }
 
+    // Without a terminal (and without -y) do not auto-activate: nothing evals
+    // the env file, so a "Switched" message would lie.
     let use_now = cli_selected
+        && (assume_yes || std::io::stdin().is_terminal())
         && crate::prompt::confirm(
             &format!("Do you want to use PHP {} now?", resolved_version)
                 .bold()
@@ -178,6 +182,7 @@ fn select_packages(
     available_packages: &[String],
     requested: &[String],
     already_installed: &[String],
+    assume_yes: bool,
 ) -> Result<Option<Vec<String>>> {
     if !requested.is_empty() {
         for pkg in requested {
@@ -193,11 +198,12 @@ fn select_packages(
         return Ok(Some(requested.to_vec()));
     }
 
-    if !std::io::stdin().is_terminal() {
+    // -y skips the MultiSelect exactly like a missing terminal does.
+    if assume_yes || !std::io::stdin().is_terminal() {
         let default_pkg = "cli".to_string();
         if !available_packages.contains(&default_pkg) {
             anyhow::bail!(
-                "No terminal to select packages and the default 'cli' package is not available for PHP {} (available: {}). Use --packages.",
+                "Cannot auto-select packages: the default 'cli' package is not available for PHP {} (available: {}). Use --packages.",
                 resolved_version,
                 available_packages.join(", ")
             );
