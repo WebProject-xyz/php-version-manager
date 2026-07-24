@@ -33,6 +33,10 @@ pub enum Commands {
     #[clap(name = "env")]
     Env(commands::env::Env),
 
+    /// Run a command under a specific PHP version
+    #[clap(name = "exec")]
+    Exec(commands::exec_cmd::Exec),
+
     /// List all locally installed PHP versions
     #[clap(name = "list", visible_aliases = &["ls"])]
     Ls(commands::ls::Ls),
@@ -45,9 +49,17 @@ pub enum Commands {
     #[clap(name = "current")]
     Current(commands::current::Current),
 
+    /// Set the default PHP version for new shells
+    #[clap(name = "default")]
+    Default(commands::default_cmd::DefaultCmd),
+
     /// Uninstall a PHP version
     #[clap(name = "uninstall", visible_aliases = &["rm", "remove"])]
     Uninstall(commands::uninstall::Uninstall),
+
+    /// Remove superseded patch versions
+    #[clap(name = "prune")]
+    Prune(commands::prune::Prune),
 
     /// Initialize a .php-version file in the current directory
     #[clap(name = "init")]
@@ -56,6 +68,14 @@ pub enum Commands {
     /// Check for and apply updates to pvm itself
     #[clap(name = "self-update")]
     SelfUpdate(commands::self_update::SelfUpdate),
+
+    /// Manage the remote version cache
+    #[clap(name = "cache")]
+    Cache(commands::cache::Cache),
+
+    /// Print the path of the active or given PHP binary
+    #[clap(name = "which")]
+    Which(commands::which_cmd::Which),
 }
 
 impl Commands {
@@ -64,12 +84,17 @@ impl Commands {
             Self::Install(cmd) => cmd.call().await,
             Self::Use(cmd) => cmd.call().await,
             Self::Env(cmd) => cmd.call().await,
+            Self::Exec(cmd) => cmd.call().await,
             Self::Ls(cmd) => cmd.call().await,
             Self::LsRemote(cmd) => cmd.call().await,
             Self::Current(cmd) => cmd.call().await,
+            Self::Default(cmd) => cmd.call().await,
             Self::Uninstall(cmd) => cmd.call().await,
+            Self::Prune(cmd) => cmd.call().await,
             Self::Init(cmd) => cmd.call().await,
             Self::SelfUpdate(cmd) => cmd.call().await,
+            Self::Cache(cmd) => cmd.call().await,
+            Self::Which(cmd) => cmd.call().await,
         }
     }
 }

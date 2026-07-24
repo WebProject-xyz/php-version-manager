@@ -10,9 +10,11 @@ pub async fn run_root_menu() -> Result<()> {
             "Use         (Switch active PHP version)",
             "Install     (Install a PHP version)",
             "Uninstall   (Remove a PHP version)",
+            "Prune       (Remove superseded patch versions)",
             "List        (View locally installed versions)",
             "List-Remote (View all available cloud versions)",
             "Current     (Print the currently active PHP version)",
+            "Default     (Set the default PHP version for new shells)",
             "Init        (Initialize a .php-version file)",
             "Exit",
         ];
@@ -28,47 +30,53 @@ pub async fn run_root_menu() -> Result<()> {
             None => break, // Esc/Q exits the menu entirely
         };
 
-        if choice == 7 {
+        if choice == options.len() - 1 {
             break;
         }
 
         let res = match choice {
             0 => {
-                let cmd = commands::use_cmd::Use {
+                commands::use_cmd::Use {
                     version: None,
                     silent: false,
-                };
-                cmd.call().await
+                    yes: false,
+                }
+                .call()
+                .await
             }
             1 => {
-                let cmd = commands::install::Install { version: None };
-                cmd.call().await
+                commands::install::Install {
+                    version: None,
+                    packages: vec![],
+                    yes: false,
+                }
+                .call()
+                .await
             }
             2 => {
-                let cmd = commands::uninstall::Uninstall {
+                commands::uninstall::Uninstall {
                     version: None,
                     yes: false,
-                };
-                cmd.call().await
+                }
+                .call()
+                .await
             }
-            3 => {
-                let cmd = commands::ls::Ls;
-                cmd.call().await
-            }
-            4 => {
-                let cmd = commands::ls_remote::LsRemote {
-                    version_prefix: None,
-                };
-                cmd.call().await
-            }
+            3 => commands::prune::Prune { yes: false }.call().await,
+            4 => commands::ls::Ls.call().await,
             5 => {
-                let cmd = commands::current::Current {};
-                cmd.call().await
+                commands::ls_remote::LsRemote {
+                    version_prefix: None,
+                }
+                .call()
+                .await
             }
-            6 => {
-                let cmd = commands::init::Init {};
-                cmd.call().await
+            6 => commands::current::Current {}.call().await,
+            7 => {
+                commands::default_cmd::DefaultCmd { version: None }
+                    .call()
+                    .await
             }
+            8 => commands::init::Init {}.call().await,
             _ => break,
         };
 

@@ -13,6 +13,8 @@ pub const REMOTE_CACHE_FILE: &str = "remote_cache.json";
 /// The name of the file used as a guard for the update check.
 pub const UPDATE_CHECK_GUARD_FILE: &str = ".update_check_guard";
 
+pub const DEFAULT_VERSION_FILE: &str = "default";
+
 /// The name of the file used to store the PHP version for a directory.
 pub const PHP_VERSION_FILE: &str = ".php-version";
 

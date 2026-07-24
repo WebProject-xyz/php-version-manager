@@ -1,9 +1,14 @@
+pub mod cache;
 pub mod current;
+pub mod default_cmd;
 pub mod env;
+pub mod exec_cmd;
 pub mod init;
 pub mod install;
 pub mod ls;
 pub mod ls_remote;
+pub mod prune;
 pub mod self_update;
 pub mod uninstall;
 pub mod use_cmd;
+pub mod which_cmd;

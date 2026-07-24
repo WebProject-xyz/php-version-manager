@@ -13,10 +13,11 @@ pub struct VersionItem {
 pub fn get_installed_packages(version: &str) -> Vec<String> {
     let mut pkgs = Vec::new();
     if let Ok(bin_dir) = get_version_bin_dir(version) {
-        if bin_dir.join("php").exists() || bin_dir.join("php.exe").exists() {
+        // No .exe variants: Windows is unsupported (get_target_triple bails).
+        if bin_dir.join("php").exists() {
             pkgs.push("cli".to_string());
         }
-        if bin_dir.join("php-fpm").exists() || bin_dir.join("php-fpm.exe").exists() {
+        if bin_dir.join("php-fpm").exists() {
             pkgs.push("fpm".to_string());
         }
         if bin_dir.join("micro.sfx").exists() {
@@ -36,6 +37,12 @@ pub fn get_pvm_dir() -> Result<PathBuf> {
 
 pub fn get_versions_dir() -> Result<PathBuf> {
     Ok(get_pvm_dir()?.join("versions"))
+}
+
+/// "8.3.1" -> "8.3"; None for names without a major.minor prefix.
+pub fn minor_of(version: &str) -> Option<String> {
+    let mut parts = version.split('.');
+    Some(format!("{}.{}", parts.next()?, parts.next()?))
 }
 
 pub fn get_version_bin_dir(version: &str) -> Result<PathBuf> {
@@ -63,7 +70,8 @@ pub fn list_installed_versions() -> Result<Vec<String>> {
         }
     }
 
-    crate::utils::sort_versions(&mut versions);
+    // Directory names are always full semver ("8.3.1"); unparsable ones sort first.
+    versions.sort_by_cached_key(|v| semver::Version::parse(v).ok());
     Ok(versions)
 }
 
@@ -79,21 +87,41 @@ pub fn get_current_version() -> String {
     "system".to_string()
 }
 
-pub fn get_env_update_path(override_path: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(path) = override_path {
-        return Ok(path);
-    }
+pub fn get_env_update_path() -> Result<PathBuf> {
     if let Ok(env_path) = std::env::var("PVM_ENV_UPDATE_PATH") {
         return Ok(PathBuf::from(env_path));
     }
+    Ok(get_pvm_dir()?.join(crate::constants::ENV_UPDATE_FILE))
+}
+
+/// The version new shells start on, persisted via 'pvm default'.
+pub fn get_default_version() -> Result<Option<String>> {
+    let path = get_pvm_dir()?.join(crate::constants::DEFAULT_VERSION_FILE);
+    match std::fs::read_to_string(path) {
+        Ok(content) => {
+            let trimmed = content.trim().to_string();
+            Ok((!trimmed.is_empty()).then_some(trimmed))
+        }
+        Err(_) => Ok(None),
+    }
+}
+
+pub fn set_default_version(version: &str) -> Result<()> {
     let pvm_dir = get_pvm_dir()?;
-    let shell_pid = std::env::var("PVM_SHELL_PID").unwrap_or_default();
-    let filename = if shell_pid.is_empty() {
-        crate::constants::ENV_UPDATE_FILE.to_string()
-    } else {
-        format!("{}_{}", crate::constants::ENV_UPDATE_FILE, shell_pid)
-    };
-    Ok(pvm_dir.join(filename))
+    std::fs::create_dir_all(&pvm_dir)?;
+    std::fs::write(
+        pvm_dir.join(crate::constants::DEFAULT_VERSION_FILE),
+        version,
+    )
+    .context("Failed to write default version file")
+}
+
+pub fn clear_default_version() -> Result<()> {
+    let path = get_pvm_dir()?.join(crate::constants::DEFAULT_VERSION_FILE);
+    if path.exists() {
+        std::fs::remove_file(path).context("Failed to remove default version file")?;
+    }
+    Ok(())
 }
 
 /// Safely writes content to the environment update file with an exclusive lock.
@@ -115,17 +143,10 @@ pub fn write_env_file_locked(path: &PathBuf, content: &str) -> Result<()> {
 }
 
 pub fn get_aliased_versions() -> Result<Vec<VersionItem>> {
-    let mut installed = list_installed_versions()?;
+    let installed = list_installed_versions()?;
     if installed.is_empty() {
         return Ok(Vec::new());
     }
-
-    // Sort semantic versions cleanly
-    installed.sort_by(|a, b| {
-        let a_parts: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
-        let b_parts: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
-        a_parts.cmp(&b_parts)
-    });
 
     let mut items = Vec::new();
 
@@ -141,9 +162,7 @@ pub fn get_aliased_versions() -> Result<Vec<VersionItem>> {
     // Minor version aliases
     let mut minors = std::collections::BTreeMap::new();
     for v in &installed {
-        let parts: Vec<&str> = v.split('.').collect();
-        if parts.len() >= 2 {
-            let minor = format!("{}.{}", parts[0], parts[1]);
+        if let Some(minor) = minor_of(v) {
             // BTreeMap keeps the latest because we iterate in ascending order, overriding previous values
             minors.insert(minor, v.clone());
         }

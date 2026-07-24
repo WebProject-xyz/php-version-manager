@@ -1,4 +1,4 @@
-use crate::constants::PVM_DIR_VAR;
+use crate::constants::{MULTISHELL_PATH_VAR, PVM_DIR_VAR};
 use crate::shell;
 use anyhow::Result;
 use clap::Parser;
@@ -30,6 +30,25 @@ impl Env {
         println!("{}", s.set_env_var(PVM_DIR_VAR, &pvm_dir.to_string_lossy()));
         println!("{}", s.wrapper_fn());
         println!("{}", s.use_on_cd());
+
+        // Activate the persisted default version ('pvm default') so every new
+        // shell starts on it instead of the system PHP.
+        if let Some(version) = crate::fs::get_default_version()? {
+            if crate::fs::is_version_installed(&version)? {
+                let bin_dir = crate::fs::get_version_bin_dir(&version)?;
+                println!(
+                    "{}",
+                    s.set_env_var(MULTISHELL_PATH_VAR, &bin_dir.to_string_lossy())
+                );
+                println!("{}", s.path(&bin_dir));
+            } else {
+                // stderr so the eval'd stdout stays clean.
+                eprintln!(
+                    "pvm: default version {} is not installed; run 'pvm default' to fix",
+                    version
+                );
+            }
+        }
 
         Ok(())
     }

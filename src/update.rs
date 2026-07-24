@@ -49,27 +49,16 @@ pub async fn check_for_updates(target_version: &str) -> Result<Option<String>> {
     }
 
     // Parse out the minor version (e.g., "8.4.1" -> "8.4")
-    let parts: Vec<&str> = target_version.split('.').collect();
-    if parts.len() < 2 {
+    let Some(minor_prefix) = fs::minor_of(target_version) else {
         return Ok(None);
-    }
-    let minor_prefix = format!("{}.{}", parts[0], parts[1]);
+    };
 
-    // Fetch remotes and resolve the newest patch for that minor line
-    match network::resolve_version(&minor_prefix).await {
-        Ok(latest_matching) => {
-            if latest_matching != target_version {
-                return Ok(Some(latest_matching));
-            }
-        }
-        Err(e) => {
-            log::debug!(
-                "Failed to resolve version for update check (minor_prefix: {}, target: {}): {}",
-                minor_prefix,
-                target_version,
-                e
-            );
-        }
+    // Fetch remotes and resolve the newest patch for that minor line.
+    // Resolution failures are ignored: the update check is best-effort.
+    if let Ok(latest_matching) = network::resolve_version(&minor_prefix).await
+        && latest_matching != target_version
+    {
+        return Ok(Some(latest_matching));
     }
 
     Ok(None)

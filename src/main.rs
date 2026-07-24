@@ -4,9 +4,9 @@ mod constants;
 mod fs;
 mod interactive;
 mod network;
+mod prompt;
 mod shell;
 mod update;
-mod utils;
 
 use anyhow::Result;
 use clap::Parser;
@@ -15,9 +15,6 @@ use colored::Colorize;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::init();
-
-    let _pvm_dir = fs::get_pvm_dir()?;
     let versions_dir = fs::get_versions_dir()?;
     std::fs::create_dir_all(&versions_dir)?;
 
