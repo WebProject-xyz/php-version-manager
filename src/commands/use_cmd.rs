@@ -204,7 +204,7 @@ fn save_question(version: &str, file_version: &Option<String>, offer_save: bool)
 fn switch_to_system(quiet: bool) -> Result<()> {
     let s = shell::detect_shell();
     let env_file = fs::get_env_update_path()?;
-    fs::write_env_file_locked(&env_file, &s.deactivate(&fs::get_versions_dir()?))?;
+    fs::write_env_file_locked(&env_file, &s.deactivate(&fs::path_without_versions()?))?;
     if !quiet {
         eprintln!("{} Switched to system PHP", "✓".green());
     }
@@ -298,7 +298,7 @@ pub(crate) async fn activate(mut version: String, opts: ActivateOpts) -> Result<
 
     // These evaluate in the user's shell hook via wrapper
     let export_str1 = s.set_env_var(MULTISHELL_PATH_VAR, &bin_dir.to_string_lossy());
-    let export_str2 = s.path(&bin_dir);
+    let export_str2 = s.path(&bin_dir, &fs::path_without_versions()?);
 
     let env_file = fs::get_env_update_path()?;
     fs::write_env_file_locked(&env_file, &format!("{}\n{}", export_str1, export_str2))?;
