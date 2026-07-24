@@ -13,10 +13,11 @@ pub struct VersionItem {
 pub fn get_installed_packages(version: &str) -> Vec<String> {
     let mut pkgs = Vec::new();
     if let Ok(bin_dir) = get_version_bin_dir(version) {
-        if bin_dir.join("php").exists() || bin_dir.join("php.exe").exists() {
+        // No .exe variants: Windows is unsupported (get_target_triple bails).
+        if bin_dir.join("php").exists() {
             pkgs.push("cli".to_string());
         }
-        if bin_dir.join("php-fpm").exists() || bin_dir.join("php-fpm.exe").exists() {
+        if bin_dir.join("php-fpm").exists() {
             pkgs.push("fpm".to_string());
         }
         if bin_dir.join("micro.sfx").exists() {
