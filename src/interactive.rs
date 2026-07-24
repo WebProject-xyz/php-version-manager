@@ -36,54 +36,47 @@ pub async fn run_root_menu() -> Result<()> {
 
         let res = match choice {
             0 => {
-                let cmd = commands::use_cmd::Use {
+                commands::use_cmd::Use {
                     version: None,
                     silent: false,
                     yes: false,
-                };
-                cmd.call().await
+                }
+                .call()
+                .await
             }
             1 => {
-                let cmd = commands::install::Install {
+                commands::install::Install {
                     version: None,
                     packages: vec![],
                     yes: false,
-                };
-                cmd.call().await
+                }
+                .call()
+                .await
             }
             2 => {
-                let cmd = commands::uninstall::Uninstall {
+                commands::uninstall::Uninstall {
                     version: None,
                     yes: false,
-                };
-                cmd.call().await
+                }
+                .call()
+                .await
             }
-            3 => {
-                let cmd = commands::prune::Prune { yes: false };
-                cmd.call().await
-            }
-            4 => {
-                let cmd = commands::ls::Ls;
-                cmd.call().await
-            }
+            3 => commands::prune::Prune { yes: false }.call().await,
+            4 => commands::ls::Ls.call().await,
             5 => {
-                let cmd = commands::ls_remote::LsRemote {
+                commands::ls_remote::LsRemote {
                     version_prefix: None,
-                };
-                cmd.call().await
+                }
+                .call()
+                .await
             }
-            6 => {
-                let cmd = commands::current::Current {};
-                cmd.call().await
-            }
+            6 => commands::current::Current {}.call().await,
             7 => {
-                let cmd = commands::default_cmd::DefaultCmd { version: None };
-                cmd.call().await
+                commands::default_cmd::DefaultCmd { version: None }
+                    .call()
+                    .await
             }
-            8 => {
-                let cmd = commands::init::Init {};
-                cmd.call().await
-            }
+            8 => commands::init::Init {}.call().await,
             _ => break,
         };
 
