@@ -26,11 +26,7 @@ impl Use {
     pub async fn call(self) -> Result<()> {
         // "system" is not a real version: deactivate pvm for this shell instead.
         if self.version.as_deref() == Some("system") {
-            let s = shell::detect_shell();
-            let env_file = fs::get_env_update_path()?;
-            fs::write_env_file_locked(&env_file, &s.deactivate(&fs::get_versions_dir()?))?;
-            eprintln!("{} Switched to system PHP", "✓".green());
-            return Ok(());
+            return switch_to_system(self.silent);
         }
 
         let version = match self.version {
@@ -39,6 +35,16 @@ impl Use {
                 None => {
                     if self.silent {
                         return Ok(());
+                    }
+
+                    // Scripts must not trigger surprise network installs: without
+                    // a terminal, installing needs an explicit --yes.
+                    if !std::io::stdin().is_terminal() && !self.yes {
+                        anyhow::bail!(
+                            "PHP {} is not installed. Run 'pvm install {}' first (or pass --yes).",
+                            v,
+                            v
+                        );
                     }
 
                     let question = format!(
@@ -64,6 +70,9 @@ impl Use {
                 let mut resolved_version = None;
                 if let Ok(content) = std::fs::read_to_string(PHP_VERSION_FILE) {
                     let trimmed = content.trim().to_string();
+                    if trimmed == "system" {
+                        return switch_to_system(self.silent);
+                    }
                     if !trimmed.is_empty() {
                         match fs::try_resolve_local_version(&trimmed)? {
                             Some(resolved) => {
@@ -71,6 +80,14 @@ impl Use {
                             }
                             None => {
                                 if !self.silent {
+                                    if !std::io::stdin().is_terminal() && !self.yes {
+                                        anyhow::bail!(
+                                            "PHP {} (from {}) is not installed. Run 'pvm install {}' first (or pass --yes).",
+                                            trimmed,
+                                            PHP_VERSION_FILE,
+                                            trimmed
+                                        );
+                                    }
                                     let question = format!(
                                         "PHP {} (from {}) is not installed locally. Do you want to install it now?",
                                         trimmed.bold(),
@@ -155,13 +172,20 @@ pub(crate) fn pick_installed_version(prompt_text: &str) -> Result<Option<String>
         .items(&displays)
         .interact_opt()?;
 
-    match selection {
-        Some(idx) => Ok(Some(items[idx].version.clone())),
-        None => {
-            eprintln!("{} Operation cancelled.", "✗".red());
-            Ok(None)
-        }
+    // Esc/cancel is a quiet no-op: the ls picker promises "Esc exits".
+    Ok(selection.map(|idx| items[idx].version.clone()))
+}
+
+/// Write the deactivation snippet for this shell session ('pvm use system',
+/// or a .php-version file containing "system").
+fn switch_to_system(quiet: bool) -> Result<()> {
+    let s = shell::detect_shell();
+    let env_file = fs::get_env_update_path()?;
+    fs::write_env_file_locked(&env_file, &s.deactivate(&fs::get_versions_dir()?))?;
+    if !quiet {
+        eprintln!("{} Switched to system PHP", "✓".green());
     }
+    Ok(())
 }
 
 pub(crate) struct ActivateOpts {
