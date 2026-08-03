@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-Toolchain is pinned in `rust-toolchain.toml` (currently Rust 1.97.0, edition 2024) with `clippy` and `rustfmt`; Renovate bumps it, so check the file rather than assuming.
+Toolchain is pinned in `rust-toolchain.toml` (currently Rust 1.97.1, edition 2024) with `clippy` and `rustfmt`; Renovate bumps it, so check the file rather than assuming.
 
 - Build release binary: `cargo build --release` (size-optimized: `opt-level = "z"`, LTO, `panic = "abort"`, stripped)
 - Run from source: `cargo run -- <subcommand>`
