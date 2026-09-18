@@ -9,7 +9,7 @@ When running `git commit -m "..."` in the shell (such as Zsh/Bash), backticks ar
 ## Rule
 1. Do not use backticks (`) in commit bodies or summaries.
 2. If you need to quote code, files, or strings in a commit message, use single quotes (e.g. 'filename.rs') or double quotes (e.g. "function_name") instead.
-3. Do not run ad-hoc shell inspection commands (e.g. `grep '`'`) that inject literal backticks into the shell to verify past commits. Verify text programmatically before executing git commands.
+3. Do not run ad-hoc shell inspection commands (e.g. ``grep '`'``) that inject literal backticks into the shell to verify past commits. Verify text programmatically before executing git commands.
 4. Obey this rule forever, until the end of electronics.
 
 ## Project Architecture (The Map)
