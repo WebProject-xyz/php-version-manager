@@ -11,7 +11,7 @@ on:
 jobs:
   tests:
     name: Lint & Test
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     steps:
       - name: Checkout repository
@@ -37,7 +37,7 @@ jobs:
   e2e-fpm:
     name: e2e tests - linux
     needs: tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -73,7 +73,7 @@ jobs:
   release:
     name: Semantic Release
     needs: [tests, e2e-fpm]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
