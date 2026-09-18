@@ -1,15 +1,16 @@
 # Gemini AI Assistant Instructions
 
 CRITICAL SAFETY DIRECTIVE:
-**NEVER use backticks (`) inside git commit messages.**
+**NEVER use backticks (`) inside git commit messages or commit shell invocations.**
 
 ## Why?
-When running `git commit -m "..."` in the shell (like Zsh/Bash), backticks are immediately evaluated as command substitution by the user's shell BEFORE the commit is executed. If a file, branch, or text snippet contains a command-like string inside backticks, the shell will execute it silently with the user's full privileges.
+When running `git commit -m "..."` in the shell (such as Zsh/Bash), backticks are immediately evaluated as command substitution by the user's shell BEFORE the commit is executed. If a file, branch, or text snippet contains a command-like string inside backticks, the shell executes it silently with the user's full privileges.
 
 ## Rule
 1. Do not use backticks (`) in commit bodies or summaries.
 2. If you need to quote code, files, or strings in a commit message, use single quotes (e.g. 'filename.rs') or double quotes (e.g. "function_name") instead.
-3. Obey this rule forever, until the end of electronics.
+3. Do not run ad-hoc shell inspection commands (e.g. `grep '`'`) that inject literal backticks into the shell to verify past commits. Verify text programmatically before executing git commands.
+4. Obey this rule forever, until the end of electronics.
 
 ## Project Architecture (The Map)
 
