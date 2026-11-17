@@ -30,7 +30,7 @@ Rooted at `$PVM_DIR` (resolved via `dirs::data_local_dir()`, so it defaults to `
 - `src/constants.rs`: Application constants.
 
 ### static-php-cli Integration
-- **Endpoint:** `https://dl.static-php.dev/static-php-cli/bulk/?format=json`
+- **Endpoint:** `https://dl.static-php.dev/v3/php-bin/bulk/?format=json` (with fallback to `https://dl.static-php.dev/static-php-cli/bulk/?format=json` for legacy versions like 8.0/8.1)
 - **Supported OS:** `linux`, `macos` (filtered via target triple).
 - **Supported Arch:** `x86_64`, `aarch64` (filtered via target triple).
 - **Packages:** `cli`, `fpm`, `micro`.

@@ -55,7 +55,7 @@ VFILTER="${PVM_VERSION_MAJOR_MINOR:-8.5}"
 ESCAPED_VFILTER="${VFILTER//./\\.}"
 
 INDEX_JSON=$(curl -fsSL --connect-timeout 10 --max-time 30 \
-    "https://dl.static-php.dev/static-php-cli/bulk/?format=json")
+    "https://dl.static-php.dev/v3/php-bin/bulk/?format=json")
 ALL_VERS=$(echo "$INDEX_JSON" \
     | grep -oE "\"php-${ESCAPED_VFILTER}\\.[0-9]+-cli-${TGT}\\.tar\\.gz\"" \
     | sed -E "s|\"php-(${ESCAPED_VFILTER}\\.[0-9]+)-cli-${TGT}\\.tar\\.gz\"|\\1|" \

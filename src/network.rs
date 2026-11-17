@@ -1,4 +1,4 @@
-use crate::constants::{BASE_URL, REMOTE_CACHE_FILE};
+use crate::constants::{BASE_URL, LEGACY_BASE_URL, REMOTE_CACHE_FILE};
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 
@@ -31,6 +31,84 @@ pub(crate) fn http_client() -> Result<Client> {
 struct RemoteFile {
     name: String,
     is_dir: bool,
+}
+
+fn is_stable_release_version(version: &str) -> bool {
+    semver::Version::parse(version).is_ok_and(|v| v.pre.is_empty() && v.build.is_empty())
+}
+
+fn parse_remote_versions(files: &[RemoteFile], target: &str) -> Vec<(String, Vec<String>)> {
+    let suffix = format!("-{}.tar.gz", target);
+
+    let mut versions_map: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for file in files {
+        if !file.is_dir
+            && file.name.starts_with("php-")
+            && file.name.ends_with(&suffix)
+            && let Some(rest) = file
+                .name
+                .strip_prefix("php-")
+                .and_then(|s| s.strip_suffix(&suffix))
+            && let Some(idx) = rest.rfind('-')
+        {
+            let version = &rest[..idx];
+            let package = &rest[idx + 1..];
+            // v3/php-bin/bulk publishes revision rebuilds (e.g. php-8.5.12-1-cli-...) alongside
+            // canonical php-8.5.12-cli-... archives; semver treats "-1" as a pre-release, which
+            // would duplicate the version and sort it before 8.5.12.
+            if !package.is_empty() && is_stable_release_version(version) {
+                versions_map
+                    .entry(version.to_string())
+                    .or_default()
+                    .push(package.to_string());
+            }
+        }
+    }
+
+    let mut versions: Vec<(String, Vec<String>)> = versions_map.into_iter().collect();
+    sort_and_dedup_versions(&mut versions);
+    versions
+}
+
+fn sort_and_dedup_versions(versions: &mut [(String, Vec<String>)]) {
+    versions.sort_by(|a, b| {
+        let v1 = semver::Version::parse(&a.0).unwrap_or(semver::Version::new(0, 0, 0));
+        let v2 = semver::Version::parse(&b.0).unwrap_or(semver::Version::new(0, 0, 0));
+        v1.cmp(&v2)
+    });
+
+    for (_, pkgs) in versions {
+        pkgs.sort();
+        pkgs.dedup();
+    }
+}
+
+fn merge_remote_versions(
+    primary: Vec<(String, Vec<String>)>,
+    legacy: Vec<(String, Vec<String>)>,
+) -> Vec<(String, Vec<String>)> {
+    let mut merged: std::collections::HashMap<String, Vec<String>> = legacy.into_iter().collect();
+    for (version, pkgs) in primary {
+        merged.insert(version, pkgs);
+    }
+    let mut versions: Vec<(String, Vec<String>)> = merged.into_iter().collect();
+    sort_and_dedup_versions(&mut versions);
+    versions
+}
+
+async fn fetch_remote_index(client: &Client, base_url: &str) -> Result<Vec<RemoteFile>> {
+    let json_url = format!("{}?format=json", base_url);
+    client
+        .get(json_url)
+        .send()
+        .await
+        .context("Failed to fetch version list from remote")?
+        .error_for_status()
+        .context("Remote server returned an error when fetching version list")?
+        .json::<Vec<RemoteFile>>()
+        .await
+        .context("Failed to parse remote version JSON")
 }
 
 pub(crate) fn get_target_triple() -> Result<&'static str> {
@@ -132,53 +210,20 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
     spinner.enable_steady_tick(Duration::from_millis(100));
 
     let client = http_client()?;
-    let json_url = format!("{}?format=json", BASE_URL);
-    let res = client
-        .get(json_url)
-        .send()
-        .await
-        .context("Failed to fetch version list from remote")?
-        .error_for_status()
-        .context("Remote server returned an error when fetching version list")?
-        .json::<Vec<RemoteFile>>()
-        .await
-        .context("Failed to parse remote version JSON")?;
+    let (primary_res, legacy_res) = tokio::join!(
+        fetch_remote_index(&client, BASE_URL),
+        fetch_remote_index(&client, LEGACY_BASE_URL),
+    );
     spinner.finish_and_clear();
 
-    let suffix = format!("-{}.tar.gz", target);
-
-    let mut versions_map: std::collections::HashMap<String, Vec<String>> =
-        std::collections::HashMap::new();
-    for file in res {
-        if !file.is_dir
-            && file.name.starts_with("php-")
-            && file.name.ends_with(&suffix)
-            && let Some(rest) = file
-                .name
-                .strip_prefix("php-")
-                .and_then(|s| s.strip_suffix(&suffix))
-            && let Some(idx) = rest.rfind('-')
-        {
-            let version = &rest[..idx];
-            let package = &rest[idx + 1..];
-            versions_map
-                .entry(version.to_string())
-                .or_default()
-                .push(package.to_string());
+    let primary_versions = parse_remote_versions(&primary_res?, target);
+    let versions = match legacy_res {
+        Ok(legacy_files) => {
+            let legacy_versions = parse_remote_versions(&legacy_files, target);
+            merge_remote_versions(primary_versions, legacy_versions)
         }
-    }
-
-    let mut versions: Vec<(String, Vec<String>)> = versions_map.into_iter().collect();
-
-    versions.sort_by(|a, b| {
-        let v1 = semver::Version::parse(&a.0).unwrap_or(semver::Version::new(0, 0, 0));
-        let v2 = semver::Version::parse(&b.0).unwrap_or(semver::Version::new(0, 0, 0));
-        v1.cmp(&v2)
-    });
-
-    for (_, pkgs) in &mut versions {
-        pkgs.sort();
-    }
+        Err(_) => primary_versions,
+    };
 
     // 3. Write to cache (skip silently if lock fails — next run will retry)
     if let Ok(json) = serde_json::to_string(&versions) {
@@ -204,7 +249,13 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
 
 pub async fn resolve_version(requested: &str) -> Result<String> {
     let versions = get_available_versions().await?;
+    resolve_version_from_list(&versions, requested)
+}
 
+fn resolve_version_from_list(
+    versions: &[(String, Vec<String>)],
+    requested: &str,
+) -> Result<String> {
     if requested == "latest" {
         if let Some((latest, _)) = versions.last() {
             return Ok(latest.clone());
@@ -242,27 +293,45 @@ pub async fn resolve_version(requested: &str) -> Result<String> {
     )
 }
 
+fn package_download_url(
+    base_url: &str,
+    resolved_version: &str,
+    package: &str,
+    target: &str,
+) -> String {
+    format!(
+        "{}php-{}-{}-{}.tar.gz",
+        base_url, resolved_version, package, target
+    )
+}
+
 pub async fn download_and_extract(
     resolved_version: &str,
     package: &str,
     dest: &Path,
 ) -> Result<()> {
     let target = get_target_triple()?;
-    let url = format!(
-        "{}php-{}-{}-{}.tar.gz",
-        BASE_URL, resolved_version, package, target
-    );
     let client = http_client()?;
-    let response = client
-        .get(&url)
+    let primary_url = package_download_url(BASE_URL, resolved_version, package, target);
+    let mut response = client
+        .get(&primary_url)
         .send()
         .await
-        .context("Failed to connect to download server")?
-        .error_for_status()
-        .context(format!(
-            "Server returned an error for PHP {} ({})",
-            resolved_version, package
-        ))?;
+        .context("Failed to connect to download server")?;
+
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        let legacy_url = package_download_url(LEGACY_BASE_URL, resolved_version, package, target);
+        response = client
+            .get(&legacy_url)
+            .send()
+            .await
+            .context("Failed to connect to legacy download server")?;
+    }
+
+    let response = response.error_for_status().context(format!(
+        "Server returned an error for PHP {} ({})",
+        resolved_version, package
+    ))?;
 
     let pb = build_download_progress_bar(response.content_length())?;
     let tmp = stream_to_tempfile(response, &pb).await?;
@@ -296,4 +365,122 @@ pub async fn download_and_extract(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(name: &str) -> RemoteFile {
+        RemoteFile {
+            name: name.to_string(),
+            is_dir: false,
+        }
+    }
+
+    fn dir(name: &str) -> RemoteFile {
+        RemoteFile {
+            name: name.to_string(),
+            is_dir: true,
+        }
+    }
+
+    #[test]
+    fn parse_remote_versions_filters_v3_artifacts_and_sorts_semver() {
+        let entries = vec![
+            dir("license/"),
+            file("README.txt"),
+            file("build-manifest.json"),
+            file("php-8.5.12-micro-linux-x86_64.tar.gz"),
+            file("php-8.5.12-cli-linux-x86_64.tar.gz"),
+            file("php-8.5.12-cli-linux-x86_64.tar.gz"),
+            file("php-8.5.12-fpm-linux-x86_64.tar.gz"),
+            file("php-8.5.12-cli-linux-x86_64.tar.gz.sha256"),
+            file("php-8.5.12-1-cli-linux-x86_64.tar.gz"),
+            file("php-8.5.12-1-fpm-linux-x86_64.tar.gz"),
+            file("php-8.5.12-1-micro-linux-x86_64.tar.gz"),
+            file("php-8.5.12-cli-macos-aarch64.tar.gz"),
+            file("php-8.4.27-cli-linux-x86_64.tar.gz"),
+            file("php-8.4.9-cli-linux-x86_64.tar.gz"),
+            file("php-8.6.0-rc1-cli-linux-x86_64.tar.gz"),
+        ];
+
+        let parsed = parse_remote_versions(&entries, "linux-x86_64");
+        assert_eq!(
+            parsed,
+            vec![
+                ("8.4.9".to_string(), vec!["cli".to_string()]),
+                ("8.4.27".to_string(), vec!["cli".to_string()]),
+                (
+                    "8.5.12".to_string(),
+                    vec!["cli".to_string(), "fpm".to_string(), "micro".to_string()]
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn resolve_version_from_list_handles_latest_exact_minor_and_missing() {
+        let versions = vec![
+            ("8.4.9".to_string(), vec!["cli".to_string()]),
+            ("8.4.27".to_string(), vec!["cli".to_string()]),
+            ("8.5.12".to_string(), vec!["cli".to_string()]),
+        ];
+
+        assert_eq!(
+            resolve_version_from_list(&versions, "latest").unwrap(),
+            "8.5.12"
+        );
+        assert_eq!(
+            resolve_version_from_list(&versions, "8.4.9").unwrap(),
+            "8.4.9"
+        );
+        assert_eq!(
+            resolve_version_from_list(&versions, "8.4").unwrap(),
+            "8.4.27"
+        );
+        assert!(resolve_version_from_list(&versions, "7.4").is_err());
+        assert!(resolve_version_from_list(&[], "latest").is_err());
+    }
+
+    #[test]
+    fn merge_remote_versions_retains_legacy_and_prefers_primary() {
+        let primary = vec![
+            (
+                "8.4.27".to_string(),
+                vec!["cli".to_string(), "fpm".to_string()],
+            ),
+            ("8.5.12".to_string(), vec!["cli".to_string()]),
+        ];
+        let legacy = vec![
+            ("8.0.30".to_string(), vec!["cli".to_string()]),
+            ("8.1.34".to_string(), vec!["cli".to_string()]),
+            ("8.4.27".to_string(), vec!["cli".to_string()]),
+        ];
+
+        assert_eq!(
+            merge_remote_versions(primary, legacy),
+            vec![
+                ("8.0.30".to_string(), vec!["cli".to_string()]),
+                ("8.1.34".to_string(), vec!["cli".to_string()]),
+                (
+                    "8.4.27".to_string(),
+                    vec!["cli".to_string(), "fpm".to_string()]
+                ),
+                ("8.5.12".to_string(), vec!["cli".to_string()]),
+            ]
+        );
+    }
+
+    #[test]
+    fn package_download_url_formats_primary_and_legacy_urls() {
+        assert_eq!(
+            package_download_url(BASE_URL, "8.5.12", "cli", "linux-x86_64"),
+            "https://dl.static-php.dev/v3/php-bin/bulk/php-8.5.12-cli-linux-x86_64.tar.gz"
+        );
+        assert_eq!(
+            package_download_url(LEGACY_BASE_URL, "8.0.30", "cli", "linux-x86_64"),
+            "https://dl.static-php.dev/static-php-cli/bulk/php-8.0.30-cli-linux-x86_64.tar.gz"
+        );
+    }
 }
