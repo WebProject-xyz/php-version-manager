@@ -114,7 +114,7 @@ jobs:
             @semantic-release/changelog
             @semantic-release/git
             @semantic-release/exec
-            conventional-changelog-conventionalcommits
+            conventional-changelog-conventionalcommits@^8.0.0
         env:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
