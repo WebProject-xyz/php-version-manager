@@ -82,7 +82,7 @@ PVM acts as a single-binary CLI. If called without arguments or when interactive
 ## Build & Release Commands
 
 ### Development & Build Commands
-- **Toolchain:** Pinned to Rust 1.95.0 with `clippy` and `rustfmt` in `rust-toolchain.toml`.
+- **Toolchain:** Pinned to Rust 1.100.0 with `clippy` and `rustfmt` in `rust-toolchain.toml`.
 - **Run from Source:** `cargo run -- <subcommand>`
 - **Build Release Binary:** `cargo build --release` (configured size-optimized in `Cargo.toml`: `opt-level = "z"`, LTO, `panic = "abort"`, stripped).
 - **Local Install from Source:** `./build.sh` (compiles release, copies to `$PVM_DIR/bin/pvm`).
