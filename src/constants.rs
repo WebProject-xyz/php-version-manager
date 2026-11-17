@@ -20,3 +20,6 @@ pub const PHP_VERSION_FILE: &str = ".php-version";
 
 /// The base URL for fetching available PHP versions.
 pub const BASE_URL: &str = "https://dl.static-php.dev/v3/php-bin/bulk/";
+
+/// Legacy base URL retained as fallback for older PHP releases (e.g. 8.0/8.1).
+pub const LEGACY_BASE_URL: &str = "https://dl.static-php.dev/static-php-cli/bulk/";

@@ -1,4 +1,4 @@
-use crate::constants::{BASE_URL, REMOTE_CACHE_FILE};
+use crate::constants::{BASE_URL, LEGACY_BASE_URL, REMOTE_CACHE_FILE};
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 
@@ -67,19 +67,48 @@ fn parse_remote_versions(files: &[RemoteFile], target: &str) -> Vec<(String, Vec
     }
 
     let mut versions: Vec<(String, Vec<String>)> = versions_map.into_iter().collect();
+    sort_and_dedup_versions(&mut versions);
+    versions
+}
 
+fn sort_and_dedup_versions(versions: &mut [(String, Vec<String>)]) {
     versions.sort_by(|a, b| {
         let v1 = semver::Version::parse(&a.0).unwrap_or(semver::Version::new(0, 0, 0));
         let v2 = semver::Version::parse(&b.0).unwrap_or(semver::Version::new(0, 0, 0));
         v1.cmp(&v2)
     });
 
-    for (_, pkgs) in &mut versions {
+    for (_, pkgs) in versions {
         pkgs.sort();
         pkgs.dedup();
     }
+}
 
+fn merge_remote_versions(
+    primary: Vec<(String, Vec<String>)>,
+    legacy: Vec<(String, Vec<String>)>,
+) -> Vec<(String, Vec<String>)> {
+    let mut merged: std::collections::HashMap<String, Vec<String>> = legacy.into_iter().collect();
+    for (version, pkgs) in primary {
+        merged.insert(version, pkgs);
+    }
+    let mut versions: Vec<(String, Vec<String>)> = merged.into_iter().collect();
+    sort_and_dedup_versions(&mut versions);
     versions
+}
+
+async fn fetch_remote_index(client: &Client, base_url: &str) -> Result<Vec<RemoteFile>> {
+    let json_url = format!("{}?format=json", base_url);
+    client
+        .get(json_url)
+        .send()
+        .await
+        .context("Failed to fetch version list from remote")?
+        .error_for_status()
+        .context("Remote server returned an error when fetching version list")?
+        .json::<Vec<RemoteFile>>()
+        .await
+        .context("Failed to parse remote version JSON")
 }
 
 pub(crate) fn get_target_triple() -> Result<&'static str> {
@@ -181,20 +210,20 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
     spinner.enable_steady_tick(Duration::from_millis(100));
 
     let client = http_client()?;
-    let json_url = format!("{}?format=json", BASE_URL);
-    let res = client
-        .get(json_url)
-        .send()
-        .await
-        .context("Failed to fetch version list from remote")?
-        .error_for_status()
-        .context("Remote server returned an error when fetching version list")?
-        .json::<Vec<RemoteFile>>()
-        .await
-        .context("Failed to parse remote version JSON")?;
+    let (primary_res, legacy_res) = tokio::join!(
+        fetch_remote_index(&client, BASE_URL),
+        fetch_remote_index(&client, LEGACY_BASE_URL),
+    );
     spinner.finish_and_clear();
 
-    let versions = parse_remote_versions(&res, target);
+    let primary_versions = parse_remote_versions(&primary_res?, target);
+    let versions = match legacy_res {
+        Ok(legacy_files) => {
+            let legacy_versions = parse_remote_versions(&legacy_files, target);
+            merge_remote_versions(primary_versions, legacy_versions)
+        }
+        Err(_) => primary_versions,
+    };
 
     // 3. Write to cache (skip silently if lock fails — next run will retry)
     if let Ok(json) = serde_json::to_string(&versions) {
@@ -264,10 +293,15 @@ fn resolve_version_from_list(
     )
 }
 
-fn package_download_url(resolved_version: &str, package: &str, target: &str) -> String {
+fn package_download_url(
+    base_url: &str,
+    resolved_version: &str,
+    package: &str,
+    target: &str,
+) -> String {
     format!(
         "{}php-{}-{}-{}.tar.gz",
-        BASE_URL, resolved_version, package, target
+        base_url, resolved_version, package, target
     )
 }
 
@@ -277,18 +311,27 @@ pub async fn download_and_extract(
     dest: &Path,
 ) -> Result<()> {
     let target = get_target_triple()?;
-    let url = package_download_url(resolved_version, package, target);
     let client = http_client()?;
-    let response = client
-        .get(&url)
+    let primary_url = package_download_url(BASE_URL, resolved_version, package, target);
+    let mut response = client
+        .get(&primary_url)
         .send()
         .await
-        .context("Failed to connect to download server")?
-        .error_for_status()
-        .context(format!(
-            "Server returned an error for PHP {} ({})",
-            resolved_version, package
-        ))?;
+        .context("Failed to connect to download server")?;
+
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        let legacy_url = package_download_url(LEGACY_BASE_URL, resolved_version, package, target);
+        response = client
+            .get(&legacy_url)
+            .send()
+            .await
+            .context("Failed to connect to legacy download server")?;
+    }
+
+    let response = response.error_for_status().context(format!(
+        "Server returned an error for PHP {} ({})",
+        resolved_version, package
+    ))?;
 
     let pb = build_download_progress_bar(response.content_length())?;
     let tmp = stream_to_tempfile(response, &pb).await?;
@@ -401,10 +444,43 @@ mod tests {
     }
 
     #[test]
-    fn package_download_url_uses_v3_bulk_base_url() {
+    fn merge_remote_versions_retains_legacy_and_prefers_primary() {
+        let primary = vec![
+            (
+                "8.4.27".to_string(),
+                vec!["cli".to_string(), "fpm".to_string()],
+            ),
+            ("8.5.12".to_string(), vec!["cli".to_string()]),
+        ];
+        let legacy = vec![
+            ("8.0.30".to_string(), vec!["cli".to_string()]),
+            ("8.1.34".to_string(), vec!["cli".to_string()]),
+            ("8.4.27".to_string(), vec!["cli".to_string()]),
+        ];
+
         assert_eq!(
-            package_download_url("8.5.12", "cli", "linux-x86_64"),
+            merge_remote_versions(primary, legacy),
+            vec![
+                ("8.0.30".to_string(), vec!["cli".to_string()]),
+                ("8.1.34".to_string(), vec!["cli".to_string()]),
+                (
+                    "8.4.27".to_string(),
+                    vec!["cli".to_string(), "fpm".to_string()]
+                ),
+                ("8.5.12".to_string(), vec!["cli".to_string()]),
+            ]
+        );
+    }
+
+    #[test]
+    fn package_download_url_formats_primary_and_legacy_urls() {
+        assert_eq!(
+            package_download_url(BASE_URL, "8.5.12", "cli", "linux-x86_64"),
             "https://dl.static-php.dev/v3/php-bin/bulk/php-8.5.12-cli-linux-x86_64.tar.gz"
+        );
+        assert_eq!(
+            package_download_url(LEGACY_BASE_URL, "8.0.30", "cli", "linux-x86_64"),
+            "https://dl.static-php.dev/static-php-cli/bulk/php-8.0.30-cli-linux-x86_64.tar.gz"
         );
     }
 }
