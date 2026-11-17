@@ -19,4 +19,4 @@ pub const DEFAULT_VERSION_FILE: &str = "default";
 pub const PHP_VERSION_FILE: &str = ".php-version";
 
 /// The base URL for fetching available PHP versions.
-pub const BASE_URL: &str = "https://dl.static-php.dev/static-php-cli/bulk/";
+pub const BASE_URL: &str = "https://dl.static-php.dev/v3/php-bin/bulk/";

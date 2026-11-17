@@ -62,7 +62,7 @@ Concurrency: every shell session uses its own tmpfile keyed on PID, and the cach
 
 ### 4. Networking (`src/network.rs`)
 
-Single endpoint: `https://dl.static-php.dev/static-php-cli/bulk/?format=json` returns the file index. `get_target_triple()` filters by `{linux,macos}-{x86_64,aarch64}`; package suffixes `cli`/`fpm`/`micro` are parsed from filenames like `php-8.4.18-cli-linux-x86_64.tar.gz`. Downloads stream via `reqwest` with an `indicatif` progress bar, then untar into `$PVM_DIR/versions/<v>/bin/` and `chmod 0755` on Unix. Other platforms/architectures are unsupported and will bail.
+Single endpoint: `https://dl.static-php.dev/v3/php-bin/bulk/?format=json` returns the file index. `get_target_triple()` filters by `{linux,macos}-{x86_64,aarch64}`; package suffixes `cli`/`fpm`/`micro` are parsed from filenames like `php-8.4.18-cli-linux-x86_64.tar.gz`. Downloads stream via `reqwest` with an `indicatif` progress bar, then untar into `$PVM_DIR/versions/<v>/bin/` and `chmod 0755` on Unix. Other platforms/architectures are unsupported and will bail.
 
 ## Conventions
 

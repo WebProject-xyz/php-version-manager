@@ -33,6 +33,55 @@ struct RemoteFile {
     is_dir: bool,
 }
 
+fn is_stable_release_version(version: &str) -> bool {
+    semver::Version::parse(version).is_ok_and(|v| v.pre.is_empty() && v.build.is_empty())
+}
+
+fn parse_remote_versions(files: &[RemoteFile], target: &str) -> Vec<(String, Vec<String>)> {
+    let suffix = format!("-{}.tar.gz", target);
+
+    let mut versions_map: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for file in files {
+        if !file.is_dir
+            && file.name.starts_with("php-")
+            && file.name.ends_with(&suffix)
+            && let Some(rest) = file
+                .name
+                .strip_prefix("php-")
+                .and_then(|s| s.strip_suffix(&suffix))
+            && let Some(idx) = rest.rfind('-')
+        {
+            let version = &rest[..idx];
+            let package = &rest[idx + 1..];
+            // v3/php-bin/bulk publishes revision rebuilds (e.g. php-8.5.12-1-cli-...) alongside
+            // canonical php-8.5.12-cli-... archives; semver treats "-1" as a pre-release, which
+            // would duplicate the version and sort it before 8.5.12.
+            if !package.is_empty() && is_stable_release_version(version) {
+                versions_map
+                    .entry(version.to_string())
+                    .or_default()
+                    .push(package.to_string());
+            }
+        }
+    }
+
+    let mut versions: Vec<(String, Vec<String>)> = versions_map.into_iter().collect();
+
+    versions.sort_by(|a, b| {
+        let v1 = semver::Version::parse(&a.0).unwrap_or(semver::Version::new(0, 0, 0));
+        let v2 = semver::Version::parse(&b.0).unwrap_or(semver::Version::new(0, 0, 0));
+        v1.cmp(&v2)
+    });
+
+    for (_, pkgs) in &mut versions {
+        pkgs.sort();
+        pkgs.dedup();
+    }
+
+    versions
+}
+
 pub(crate) fn get_target_triple() -> Result<&'static str> {
     use std::env::consts::{ARCH, OS};
     match (OS, ARCH) {
@@ -145,40 +194,7 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
         .context("Failed to parse remote version JSON")?;
     spinner.finish_and_clear();
 
-    let suffix = format!("-{}.tar.gz", target);
-
-    let mut versions_map: std::collections::HashMap<String, Vec<String>> =
-        std::collections::HashMap::new();
-    for file in res {
-        if !file.is_dir
-            && file.name.starts_with("php-")
-            && file.name.ends_with(&suffix)
-            && let Some(rest) = file
-                .name
-                .strip_prefix("php-")
-                .and_then(|s| s.strip_suffix(&suffix))
-            && let Some(idx) = rest.rfind('-')
-        {
-            let version = &rest[..idx];
-            let package = &rest[idx + 1..];
-            versions_map
-                .entry(version.to_string())
-                .or_default()
-                .push(package.to_string());
-        }
-    }
-
-    let mut versions: Vec<(String, Vec<String>)> = versions_map.into_iter().collect();
-
-    versions.sort_by(|a, b| {
-        let v1 = semver::Version::parse(&a.0).unwrap_or(semver::Version::new(0, 0, 0));
-        let v2 = semver::Version::parse(&b.0).unwrap_or(semver::Version::new(0, 0, 0));
-        v1.cmp(&v2)
-    });
-
-    for (_, pkgs) in &mut versions {
-        pkgs.sort();
-    }
+    let versions = parse_remote_versions(&res, target);
 
     // 3. Write to cache (skip silently if lock fails — next run will retry)
     if let Ok(json) = serde_json::to_string(&versions) {
@@ -204,7 +220,13 @@ pub async fn get_available_versions() -> Result<Vec<(String, Vec<String>)>> {
 
 pub async fn resolve_version(requested: &str) -> Result<String> {
     let versions = get_available_versions().await?;
+    resolve_version_from_list(&versions, requested)
+}
 
+fn resolve_version_from_list(
+    versions: &[(String, Vec<String>)],
+    requested: &str,
+) -> Result<String> {
     if requested == "latest" {
         if let Some((latest, _)) = versions.last() {
             return Ok(latest.clone());
@@ -242,16 +264,20 @@ pub async fn resolve_version(requested: &str) -> Result<String> {
     )
 }
 
+fn package_download_url(resolved_version: &str, package: &str, target: &str) -> String {
+    format!(
+        "{}php-{}-{}-{}.tar.gz",
+        BASE_URL, resolved_version, package, target
+    )
+}
+
 pub async fn download_and_extract(
     resolved_version: &str,
     package: &str,
     dest: &Path,
 ) -> Result<()> {
     let target = get_target_triple()?;
-    let url = format!(
-        "{}php-{}-{}-{}.tar.gz",
-        BASE_URL, resolved_version, package, target
-    );
+    let url = package_download_url(resolved_version, package, target);
     let client = http_client()?;
     let response = client
         .get(&url)
@@ -296,4 +322,89 @@ pub async fn download_and_extract(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(name: &str) -> RemoteFile {
+        RemoteFile {
+            name: name.to_string(),
+            is_dir: false,
+        }
+    }
+
+    fn dir(name: &str) -> RemoteFile {
+        RemoteFile {
+            name: name.to_string(),
+            is_dir: true,
+        }
+    }
+
+    #[test]
+    fn parse_remote_versions_filters_v3_artifacts_and_sorts_semver() {
+        let entries = vec![
+            dir("license/"),
+            file("README.txt"),
+            file("build-manifest.json"),
+            file("php-8.5.12-micro-linux-x86_64.tar.gz"),
+            file("php-8.5.12-cli-linux-x86_64.tar.gz"),
+            file("php-8.5.12-cli-linux-x86_64.tar.gz"),
+            file("php-8.5.12-fpm-linux-x86_64.tar.gz"),
+            file("php-8.5.12-cli-linux-x86_64.tar.gz.sha256"),
+            file("php-8.5.12-1-cli-linux-x86_64.tar.gz"),
+            file("php-8.5.12-1-fpm-linux-x86_64.tar.gz"),
+            file("php-8.5.12-1-micro-linux-x86_64.tar.gz"),
+            file("php-8.5.12-cli-macos-aarch64.tar.gz"),
+            file("php-8.4.27-cli-linux-x86_64.tar.gz"),
+            file("php-8.4.9-cli-linux-x86_64.tar.gz"),
+            file("php-8.6.0-rc1-cli-linux-x86_64.tar.gz"),
+        ];
+
+        let parsed = parse_remote_versions(&entries, "linux-x86_64");
+        assert_eq!(
+            parsed,
+            vec![
+                ("8.4.9".to_string(), vec!["cli".to_string()]),
+                ("8.4.27".to_string(), vec!["cli".to_string()]),
+                (
+                    "8.5.12".to_string(),
+                    vec!["cli".to_string(), "fpm".to_string(), "micro".to_string()]
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn resolve_version_from_list_handles_latest_exact_minor_and_missing() {
+        let versions = vec![
+            ("8.4.9".to_string(), vec!["cli".to_string()]),
+            ("8.4.27".to_string(), vec!["cli".to_string()]),
+            ("8.5.12".to_string(), vec!["cli".to_string()]),
+        ];
+
+        assert_eq!(
+            resolve_version_from_list(&versions, "latest").unwrap(),
+            "8.5.12"
+        );
+        assert_eq!(
+            resolve_version_from_list(&versions, "8.4.9").unwrap(),
+            "8.4.9"
+        );
+        assert_eq!(
+            resolve_version_from_list(&versions, "8.4").unwrap(),
+            "8.4.27"
+        );
+        assert!(resolve_version_from_list(&versions, "7.4").is_err());
+        assert!(resolve_version_from_list(&[], "latest").is_err());
+    }
+
+    #[test]
+    fn package_download_url_uses_v3_bulk_base_url() {
+        assert_eq!(
+            package_download_url("8.5.12", "cli", "linux-x86_64"),
+            "https://dl.static-php.dev/v3/php-bin/bulk/php-8.5.12-cli-linux-x86_64.tar.gz"
+        );
+    }
 }
