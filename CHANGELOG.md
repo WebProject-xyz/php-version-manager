@@ -1,3 +1,10 @@
+## [2.0.2](https://github.com/WebProject-xyz/php-version-manager/compare/v2.0.1...v2.0.2) (2026-11-17)
+
+### Bug Fixes
+
+* **ci:** pin conventional-changelog-conventionalcommits to ^8.0.0 ([ccdcfa8](https://github.com/WebProject-xyz/php-version-manager/commit/ccdcfa8d621949829ee2c5d46722053354d6f4bd))
+* switch remote PHP index to v3/php-bin/bulk endpoint ([#50](https://github.com/WebProject-xyz/php-version-manager/issues/50)) ([d6e28af](https://github.com/WebProject-xyz/php-version-manager/commit/d6e28afd859618459db4b5772f3e46f952001d7e))
+
 ## [2.0.1](https://github.com/WebProject-xyz/php-version-manager/compare/v2.0.0...v2.0.1) (2026-07-24)
 
 ### Bug Fixes
